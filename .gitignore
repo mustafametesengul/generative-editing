@@ -219,3 +219,6 @@ __marimo__/
 
 # Confidential source material
 Syntonym_CV_GenAI_Task.pdf
+
+# Local model outputs and evaluation samples
+artifacts/

@@ -25,7 +25,9 @@ def test_edit_mattes_are_bounded_and_weather_specific() -> None:
     decomposition = HeuristicSceneDecomposer().decompose(synthetic_scene())
     rain = decomposition.edit_matte(Weather.RAIN)
     snow = decomposition.edit_matte(Weather.SNOW)
+    fog = decomposition.edit_matte(Weather.FOG)
 
     assert np.isfinite(rain).all()
     assert 0.0 <= rain.min() <= rain.max() <= 1.0
     assert snow[110, 10] > rain[110, 10]
+    assert fog[60, 20] > rain[60, 20]

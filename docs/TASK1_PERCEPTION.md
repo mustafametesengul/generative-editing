@@ -49,8 +49,10 @@ The ontology maps semantic logits into causal weather layers:
 The critical fusion is implemented in `decomposition.py`. For target $w$, the prototype forms a target-specific support and suppresses guarded pixels:
 
 $$
-M_w = \operatorname{blur}\left(\max(\alpha_w S_{sky},\beta_w S_{surface},\gamma_w S_{far})\,C\,(1-0.9G)\right).
+M_w = \operatorname{blur}\left(\max(\alpha_w S_{sky},\beta_w S_{surface},\gamma_w S_{far})\,C\,(1-\delta_w G)\right).
 $$
+
+The target-specific $\delta_w$ is high for edits that should retain local contrast, but low for fog because physically correct scattering attenuates edges while retaining their locations.
 
 This is interpretable and testable. The production successor learns the fusion head from paired change masks while retaining explicit channels and monotonic constraints. Weak labels come from aligned before/after imagery: unchanged DINO features and optical-flow-consistent edges supervise preservation; changed, weather-correlated regions supervise edit support. A small gold set calibrates rather than hand-labeling every image.
 

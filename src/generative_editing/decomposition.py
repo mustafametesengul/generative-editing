@@ -48,13 +48,13 @@ class SceneDecomposition:
     def edit_matte(self, weather: Weather) -> np.ndarray:
         """Build a conservative alpha matte for a requested weather edit."""
         weights = {
-            Weather.CLEAR: (1.00, 0.20, 0.25),
-            Weather.OVERCAST: (1.00, 0.25, 0.30),
-            Weather.RAIN: (0.90, 0.55, 0.45),
-            Weather.SNOW: (0.90, 0.75, 0.40),
-            Weather.FOG: (0.55, 0.15, 1.00),
+            Weather.CLEAR: (1.00, 0.20, 0.25, 0.75),
+            Weather.OVERCAST: (1.00, 0.25, 0.30, 0.75),
+            Weather.RAIN: (0.90, 0.55, 0.45, 0.80),
+            Weather.SNOW: (0.90, 0.75, 0.40, 0.65),
+            Weather.FOG: (0.55, 0.15, 1.00, 0.20),
         }
-        sky_weight, surface_weight, atmosphere_weight = weights[weather]
+        sky_weight, surface_weight, atmosphere_weight, guard_weight = weights[weather]
         matte = np.maximum.reduce(
             (
                 sky_weight * self.sky,
@@ -63,7 +63,7 @@ class SceneDecomposition:
             )
         )
         matte *= 0.25 + 0.75 * self.confidence
-        matte *= 1.0 - 0.90 * self.structure_guard
+        matte *= 1.0 - guard_weight * self.structure_guard
         matte = cv2.GaussianBlur(matte.astype(np.float32), (0, 0), sigmaX=1.2)
         return np.clip(matte, 0.0, 1.0)
 

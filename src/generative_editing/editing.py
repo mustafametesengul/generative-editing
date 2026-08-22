@@ -35,7 +35,7 @@ class Flux2KleinEditor:
             )
 
         self._torch = torch
-        self.pipeline = Flux2KleinPipeline.from_pretrained(model_id, torch_dtype=torch.bfloat16)
+        self.pipeline = Flux2KleinPipeline.from_pretrained(model_id, dtype=torch.bfloat16)
         if cpu_offload:
             self.pipeline.enable_model_cpu_offload()
         else:
