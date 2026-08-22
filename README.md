@@ -2,7 +2,7 @@
 
 Technical assessment submission for structured attribute detection and controllable generative editing. The domain is **weather transformation in outdoor photographs**: changing sky, visibility, precipitation, and surface response while preserving camera, geometry, identities, text, and scene layout.
 
-The pipeline is **generate → verify → select**: FLUX.2 Klein edits the full frame for several seeds, the Task 1 decomposition scores each candidate and hard-gates semantic drift (added people, altered land-water boundaries), and the best passing candidate is returned.
+The pipeline **generates, verifies, and selects** candidates. FLUX.2 Klein edits the full frame for several seeds, the Task 1 decomposition scores each candidate and hard-gates semantic drift (added people, altered land-water boundaries), and the best passing candidate is returned.
 
 | Before | After (snow) |
 |---|---|
@@ -16,19 +16,16 @@ More examples, masks, and metrics: [demo README](artifacts/weather_demo/README.m
 - [Task 1: perception architecture](docs/TASK1_PERCEPTION.md)
 - [Task 2: generative architecture](docs/TASK2_GENERATION.md)
 - [Task 3: training and distillation](docs/TASK3_TRAINING_DISTILLATION.md)
-- Task 1 prototype: `src/generative_editing/decomposition.py`
-- Task 2 prototype: `src/generative_editing/editing.py`, `pipeline.py`, and `evaluation.py`
+- [Task 1 prototype](src/generative_editing/decomposition.py)
+- Task 2 prototype: [editing](src/generative_editing/editing.py), [pipeline](src/generative_editing/pipeline.py), and [evaluation](src/generative_editing/evaluation.py)
 - [L4 inference demo: sources, edits, masks, metrics, and attribution](artifacts/weather_demo/README.md)
 
 ## Setup and checks
 
 ```bash
 uv sync
-uv run python scripts/check_cuda.py
 uv run pytest -q
 ```
-
-The CUDA check performs a real matrix multiplication. The included demo artifacts were generated on an NVIDIA L4.
 
 ## Run without model weights
 
