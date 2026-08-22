@@ -1,26 +1,26 @@
 # FLUX.2 Klein Weather Demo
 
-All edits use transformer decomposition, `black-forest-labs/FLUX.2-klein-4B`, four inference steps, and an NVIDIA L4.
+All edits use transformer decomposition, `black-forest-labs/FLUX.2-klein-4B`, four inference steps, and an NVIDIA L4. Each case generates four seeded candidates; the verifier scores them against the Task 1 contract, hard-gates semantic drift (added people/vehicles, water turned to land, new water over solid ground), and keeps the best passing candidate. The selected candidate's pixels are returned untouched — no compositing or post-hoc tone mapping.
 
-The appearance matte controls geometry-preserving color, illumination, and material response. The generation matte controls where raw generated spatial content may enter.
+The edit matte licenses appearance change and defines leakage through its complement. The generation matte marks where new spatial texture is licensed. A per-candidate segmentation layout provides the drift gates. All are verification channels, not blend weights.
 
 ![Source, result, appearance matte, and generation matte](contact_sheet.jpg)
 
 ## Results
 
-| Case | Target | Seed | Global MAE | Strong-support MAE | Weak-support MAE | Structure edge F1 |
-|---|---:|---:|---:|---:|---:|---:|
-| [urban_rain](results/urban_rain.png) | rain | 11 | 0.106 | 0.143 | 0.083 | 0.900 |
-| [mountain_fog](results/mountain_fog.png) | fog | 23 | 0.114 | 0.130 | 0.069 | 0.638 |
-| [coastal_snow](results/coastal_snow.png) | snow | 37 | 0.186 | 0.220 | 0.151 | 0.915 |
+| Case | Target | Selected seed | Global MAE | Weak-support MAE | Structure edge F1 | Protected gain | Water loss | Water gain | Passed |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| [urban_rain](results/urban_rain.png) | rain | 14 | 0.134 | 0.123 | 0.874 | 0.000 | 0.000 | 0.000 | yes |
+| [mountain_fog](results/mountain_fog.png) | fog | 25 | 0.147 | 0.121 | 0.486 | 0.000 | 0.000 | 0.018 | yes |
+| [coastal_snow](results/coastal_snow.png) | snow | 54 | 0.279 | 0.293 | 0.756 | 0.000 | 0.006 | 0.003 | yes |
 
-Fog and diffuse rain intentionally attenuate edge contrast, so structure-edge thresholds are calibrated per target rather than compared directly across weather types.
+Weak-support MAE is intentionally nonzero: weather legitimately changes illumination across the whole frame, so pixel identity outside the mattes is not a gate. Fog and diffuse rain attenuate edge contrast, so structure-edge thresholds are calibrated per target rather than compared directly across weather types.
 
 ## Observations
 
-- **urban_rain**: Rain changes sky and surfaces; diffuse tone mapping reduces the measured facade sun/shadow ratio from 1.338 to 1.202 while retaining masonry detail.
-- **mountain_fog**: Fog attenuates distant terrain through the depth-conditioned generation matte while foreground geometry is retained.
-- **coastal_snow**: Mountain-labeled islands and lighthouse-base rock receive accumulation; the sea remains liquid and invented foreground geometry is rejected.
+- **urban_rain**: The minimal per-target prompt passed all gates on every seed; the earlier constraint-list prompt invented foreground ponds on 4/4 seeds and one phantom protected instance, all caught by the water-gain and protected-gain gates. Masonry edges, the minaret, and the dry-scrub terrain are retained under a coherent storm sky.
+- **mountain_fog**: Fog thickens with distance as a volume rather than a flat veil; the lake outline, shoreline, and foreground rock remain in place. One rejected seed had turned most of the lake into fogged-over terrain (water loss 0.61).
+- **coastal_snow**: Snow keeps its explicit liquid-water prompt constraints — the minimal prompt froze the entire sea on every seed. The gated selection rejected candidates that extended shorelines or grew snow banks over open water (water loss 0.10–0.14 in the final batch, up to 0.48 across scanned seeds, versus 0.006 selected); accumulation lands on islands, rocks, and terrain while the sea stays liquid and lighthouse geometry is intact.
 
 ## Source attribution
 

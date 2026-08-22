@@ -8,6 +8,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from generative_editing.decomposition import SceneLayout
+
 
 @dataclass(frozen=True)
 class EditMetrics:
@@ -15,6 +17,9 @@ class EditMetrics:
     semantic_support_mae: float
     weak_support_mae: float
     structure_edge_f1: float
+    protected_gain: float
+    water_loss: float
+    water_gain: float
 
     def as_dict(self) -> dict[str, float]:
         return asdict(self)
@@ -25,6 +30,8 @@ def evaluate_edit(
     edited: Image.Image,
     matte: np.ndarray,
     structure_guard: np.ndarray | None = None,
+    source_layout: SceneLayout | None = None,
+    candidate_layout: SceneLayout | None = None,
 ) -> EditMetrics:
     source = np.asarray(original.convert("RGB"), dtype=np.float32) / 255.0
     result = np.asarray(edited.convert("RGB").resize(original.size), dtype=np.float32) / 255.0
@@ -48,16 +55,65 @@ def evaluate_edit(
         ) > 0
     edge_f1 = _tolerant_edge_f1(source_edges, result_edges, structure_region)
 
+    protected_gain = 0.0
+    water_loss = 0.0
+    water_gain = 0.0
+    if source_layout is not None and candidate_layout is not None:
+        protected_gain, water_loss, water_gain = _layout_drift(source_layout, candidate_layout)
+
     return EditMetrics(
         global_edit_mae=global_edit_mae,
         semantic_support_mae=semantic_support_mae,
         weak_support_mae=weak_support_mae,
         structure_edge_f1=edge_f1,
+        protected_gain=protected_gain,
+        water_loss=water_loss,
+        water_gain=water_gain,
     )
+
+
+def _layout_drift(
+    source: SceneLayout, candidate: SceneLayout, minimum_water: float = 0.005
+) -> tuple[float, float, float]:
+    """Appeared protected content, source water turned solid, and new water over solid ground."""
+    protected_gain = float((candidate.protected & ~source.protected).mean())
+    water_gain = float((candidate.water & ~source.water & ~source.sky).mean())
+    water_area = float(source.water.mean())
+    if water_area < minimum_water:
+        return protected_gain, 0.0, water_gain
+    flipped = source.water & ~candidate.water & ~candidate.sky
+    return protected_gain, float(flipped.mean() / water_area), water_gain
 
 
 def _weighted_mean(values: np.ndarray, weights: np.ndarray) -> float:
     return float((values * weights).sum() / max(weights.sum(), 1e-10))
+
+
+def candidate_score(metrics: EditMetrics, minimum_edit: float = 0.02) -> float:
+    """Rank candidates by preservation once a visible edit is confirmed."""
+    if metrics.semantic_support_mae < minimum_edit:
+        return float("-inf")
+    return (
+        metrics.structure_edge_f1
+        - 2.0 * metrics.weak_support_mae
+        - 50.0 * metrics.protected_gain
+        - 8.0 * metrics.water_loss
+        - 8.0 * metrics.water_gain
+    )
+
+
+def passes_preservation(
+    metrics: EditMetrics,
+    max_protected_gain: float = 0.001,
+    max_water_loss: float = 0.03,
+    max_water_gain: float = 0.02,
+) -> bool:
+    """Hard gate: no invented protected content, no water turned solid, no ponds over solid ground."""
+    return (
+        metrics.protected_gain <= max_protected_gain
+        and metrics.water_loss <= max_water_loss
+        and metrics.water_gain <= max_water_gain
+    )
 
 
 def _tolerant_edge_f1(source: np.ndarray, result: np.ndarray, region: np.ndarray) -> float:

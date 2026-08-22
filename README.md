@@ -1,6 +1,6 @@
 # Selective Weather Editing
 
-Technical assessment submission for structured attribute detection and controllable generative editing. The chosen domain is **weather transformation in outdoor photographs**: change sky, visibility, precipitation, and weather-dependent surface appearance while preserving camera, geometry, object identity, text, and scene layout.
+Technical assessment submission for structured attribute detection and controllable generative editing. The chosen domain is **weather transformation in outdoor photographs**: change sky, visibility, precipitation, and weather-dependent surface appearance while preserving camera, geometry, object identity, text, and scene layout. The generator owns every output pixel; the Task 1 decomposition acts as a verification contract that scores and selects seeded candidates instead of compositing them.
 
 ## Deliverables
 
@@ -20,11 +20,11 @@ uv run python scripts/check_cuda.py
 uv run pytest -q
 ```
 
-The CUDA check performs a real matrix multiplication. At submission time this workspace did not expose an NVIDIA device, although the expected target is an L4.
+The CUDA check performs a real matrix multiplication. The included demo artifacts were generated on an NVIDIA L4.
 
 ## Run without model weights
 
-The default path is deterministic and exercises decomposition, editing, selective compositing, metrics, and debug-mask export:
+The default path is deterministic and exercises decomposition, editing, candidate verification and selection, metrics, and debug-mask export:
 
 ```bash
 uv run generative-editing input.jpg output.jpg \
@@ -43,6 +43,7 @@ uv run generative-editing input.jpg output.jpg \
 	--weather rain \
 	--editor flux \
 	--decomposer transformers \
+	--candidates 2 \
 	--debug-dir artifacts/masks
 ```
 

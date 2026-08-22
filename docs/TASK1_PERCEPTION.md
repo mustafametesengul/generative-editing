@@ -20,7 +20,7 @@ flowchart LR
     K -->|uncertain| M[Conservative mask or review]
 ```
 
-The output contract contains soft masks for `sky`, `atmosphere`, `weather_surface`, and `structure_guard`, plus per-pixel confidence. It separates *where weather can manifest* from *what cannot move*. The generator receives the source and a controlled instruction; the compositor later uses this contract to enforce preservation.
+The output contract contains soft masks for `sky`, `atmosphere`, `weather_surface`, and `structure_guard`, plus per-pixel confidence. It separates *where weather can manifest* from *what cannot move*. The generator receives the source and a controlled instruction; a verifier later uses this contract to score seeded candidates and gate acceptance. The same segmenter also produces a compact `SceneLayout` (protected instances, water, sky) for both source and each candidate, so the verifier can measure semantic drift — appeared people or vehicles, water turned to land, or new water over solid ground — that photometric metrics cannot see.
 
 ## Model choice and trade-offs
 
@@ -49,18 +49,18 @@ The ontology maps semantic logits into causal weather layers:
 The critical fusion is implemented in `decomposition.py`. For target $w$, the prototype combines global weather support $g_w$ with stronger semantic support:
 
 $$
-M_w = \operatorname{blur}\left(g_w + (1-g_w)\max(\alpha_w S_{sky},\beta_w S_{surface},\gamma_w S_{far})C\right).
+M_w = \mathrm{blur}\left(g_w + (1-g_w)\max(\alpha_w S_{sky},\beta_w S_{surface},\gamma_w S_{far})C\right).
 $$
 
-The global term is essential: weather changes illumination and color across the frame, and snow can accumulate on many materials beyond a fixed ground-class list. Structure is therefore not removed from $M_w$. Instead, the compositor restores source high-frequency detail around $G$ while retaining the candidate's low-frequency weather appearance. This preserves edge location without freezing the original lighting at those pixels.
+The global term is essential: weather changes illumination and color across the frame, and snow can accumulate on many materials beyond a fixed ground-class list. Structure is therefore not removed from $M_w$. Instead, the structure guard $G$ tells the verifier where candidate edges must coincide with source edges; a candidate that moves guarded geometry is scored down and rejected rather than repainted. This preserves edge location without freezing the original lighting at those pixels.
 
 A second, narrower generation matte excludes the global floor:
 
 $$
-R_w = \operatorname{blur}\left(\max(\hat\alpha_w S_{sky},\hat\beta_w S_{surface},\hat\gamma_w S_{far})C\right).
+R_w = \mathrm{blur}\left(\max(\hat\alpha_w S_{sky},\hat\beta_w S_{surface},\hat\gamma_w S_{far})C\right).
 $$
 
-$M_w$ controls geometry-preserving color and illumination transfer across the image; $R_w$ controls where raw generated spatial content may enter. This prevents a model-invented foreground object or frozen patch from appearing in water while still allowing the water color and contrast to respond to snowy illumination.
+$M_w$ licenses appearance change: change weighted by its complement is measured as leakage. $R_w$ licenses new spatial texture such as particles, cloud forms, and accumulation; texture change outside it — a model-invented foreground object or a frozen patch in open water — is flagged as a violation even when the global illumination shift is legitimate.
 
 This is interpretable and testable. The production successor learns the fusion head from paired change masks while retaining explicit channels and monotonic constraints. Weak labels come from aligned before/after imagery: unchanged DINO features and optical-flow-consistent edges supervise preservation; changed, weather-correlated regions supervise edit support. A small gold set calibrates rather than hand-labeling every image.
 

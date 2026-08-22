@@ -1,4 +1,9 @@
-"""End-to-end selective weather editing pipeline."""
+"""End-to-end selective weather editing pipeline.
+
+The generator owns every output pixel. The Task 1 decomposition is a
+verification contract, not a compositing recipe: it scores where change is
+licensed, flags leakage elsewhere, and selects the best seeded candidate.
+"""
 
 from __future__ import annotations
 
@@ -9,8 +14,8 @@ import numpy as np
 from PIL import Image
 
 from generative_editing.decomposition import SceneDecomposer, SceneDecomposition, Weather
-from generative_editing.editing import ImageEditor, selective_composite
-from generative_editing.evaluation import EditMetrics, evaluate_edit
+from generative_editing.editing import ImageEditor
+from generative_editing.evaluation import EditMetrics, candidate_score, evaluate_edit, passes_preservation
 
 
 @dataclass(frozen=True)
@@ -20,6 +25,8 @@ class PipelineResult:
     matte: np.ndarray
     generation_matte: np.ndarray
     metrics: EditMetrics
+    seed: int
+    passed: bool
 
     def save_debug_masks(self, directory: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)
@@ -37,24 +44,39 @@ class PipelineResult:
 
 
 class WeatherEditingPipeline:
-    def __init__(self, decomposer: SceneDecomposer, editor: ImageEditor) -> None:
+    def __init__(self, decomposer: SceneDecomposer, editor: ImageEditor, candidates: int = 1) -> None:
+        if candidates < 1:
+            raise ValueError("At least one candidate is required")
         self.decomposer = decomposer
         self.editor = editor
+        self.candidates = candidates
 
     def run(self, image: Image.Image, weather: Weather, seed: int = 0) -> PipelineResult:
         source = image.convert("RGB")
         decomposition = self.decomposer.decompose(source)
-        candidate = self.editor.edit(source, weather, seed)
+        source_layout = self.decomposer.layout(source)
         matte = decomposition.edit_matte(weather)
         generation_matte = decomposition.generation_matte(weather)
-        output = selective_composite(
-            source,
-            candidate,
-            matte,
-            decomposition.structure_guard,
-            generation_matte,
-            detail_strength=0.20 if weather is Weather.FOG else 1.0,
-            weather=weather,
-        )
-        metrics = evaluate_edit(source, output, generation_matte, decomposition.structure_guard)
-        return PipelineResult(output, decomposition, matte, generation_matte, metrics)
+
+        best: PipelineResult | None = None
+        best_key: tuple[bool, float] = (False, float("-inf"))
+        for offset in range(self.candidates):
+            candidate_seed = seed + offset
+            candidate = self.editor.edit(source, weather, candidate_seed)
+            metrics = evaluate_edit(
+                source,
+                candidate,
+                matte,
+                decomposition.structure_guard,
+                source_layout,
+                self.decomposer.layout(candidate),
+            )
+            passed = passes_preservation(metrics)
+            key = (passed, candidate_score(metrics))
+            if best is None or key > best_key:
+                best = PipelineResult(
+                    candidate, decomposition, matte, generation_matte, metrics, candidate_seed, passed
+                )
+                best_key = key
+        assert best is not None
+        return best

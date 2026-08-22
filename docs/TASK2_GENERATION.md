@@ -9,13 +9,13 @@ flowchart LR
     D[Controlled weather target] --> E[Prompt and policy compiler]
     B --> E
     E --> C
-    C --> F[Candidate edit]
-    A --> G[Preservation-aware compositor]
+    C --> F[Seeded candidates]
+    A --> G[Decomposition-guided verifier]
     B --> G
     F --> G
     G --> H[Edit, preserve, realism and safety gates]
     H -->|pass| I[Provenance plus encrypted output]
-    H -->|soft fail| J[Retry with lower support/strength]
+    H -->|soft fail| J[Retry with new seed or stronger prompt]
     H -->|hard fail| K[Reject or review]
 ```
 
@@ -28,15 +28,17 @@ The alternative 20B Qwen-Image-Edit-2511 has strong consistency and geometric re
 | Approach | Edit control | Preservation | Cost | Assessment |
 |---|---|---|---|---|
 | Latent-diffusion inpainting | Excellent binary spatial control | Exact outside mask; seams at boundaries | Moderate, many denoising steps | Strong sky replacement baseline, weak for global illumination/fog |
-| ControlNet-style depth/edge conditioning | Explicit geometry retention | Strong structure if controls are reliable | Extra network and domain training | Add if prompt plus compositor cannot preserve geometry |
+| ControlNet-style depth/edge conditioning | Explicit geometry retention | Strong structure if controls are reliable | Extra network and domain training | Add if prompt plus verification cannot preserve geometry |
 | Native rectified-flow transformer edit | Understands global instruction and image jointly | Strong semantic consistency, but can drift | Four steps for Klein | Selected candidate generator |
 | Large autoregressive/multimodal editor | Strong instruction reasoning | Often strong identity/text behavior | Too large/slow for L4 | Offline teacher/evaluation comparator |
 
-Rectified flow is justified despite not being a classic diffusion chain: it is a transformer-based generative family allowed by the brief, follows a straighter denoising trajectory, and reaches the target latency at four steps. Prompt-only preservation is insufficient. The pipeline asks the model for a coherent candidate, then uses two Task 1 maps. The broad appearance matte transfers the candidate's bounded per-channel color statistics onto source pixels, so illumination changes globally without importing geometry. The narrower generation matte admits raw candidate content only in sky, depth-conditioned atmosphere, and receptive solid surfaces. Around static structural guards, source high-frequency detail replaces generated detail for rain/snow, while fog restores only 20% because scattering should attenuate contrast. This preserves geometry without freezing building pixels in the old weather or allowing invented objects into non-receptive regions.
+Rectified flow is justified despite not being a classic diffusion chain: it is a transformer-based generative family allowed by the brief, follows a straighter denoising trajectory, and reaches the target latency at four steps. The generator owns every output pixel. An earlier iteration composited candidate pixels back onto the source through the Task 1 mattes with bounded color transfer, deterministic tone curves, and guarded detail reinjection; it enforced preservation numerically but produced seams, halos, and tone breaks around structure — a "Photoshopped" look — because hand-tuned photometry fought the globally coherent illumination the editor had already synthesized. The redesign inverts the mattes' role from blend weights to a verification contract. The broad appearance matte defines where change is licensed and, through its complement, where change counts as leakage. The narrower generation matte defines where new spatial texture may appear. The structure guard defines where candidate edges must stay put. On top of the photometric checks, a semantic layout probe re-segments each candidate and measures drift against the source: appeared protected instances (people, vehicles, signs), source water turned solid, and new water over solid ground are hard gates, because MAE and edge metrics cannot distinguish "snow on water" from "new land". The pipeline generates a small set of seeded candidates, scores each against this contract, and returns the best passing candidate untouched: preservation is enforced by selection and rejection, never by repainting.
 
-Material response is target-specific rather than only a blend-strength change. Rain and overcast apply a cool, desaturated square-root luminance curve that compresses direct-sun highlights relative to shadows, approximating diffuse cloud illumination on buildings even when the generator retains the source lighting. Snow cools and lifts source materials globally, while raw accumulation remains restricted to exposed terrain and other receptive classes. In production, a learned material-and-surface-normal head would replace these deterministic profiles and distinguish upward-facing accumulation from vertical facades.
+The edit instruction is a per-target policy tuned against the verifier, not a fixed template. A/B runs across seeds showed that a minimal instruction ("Keep everything the same, except that the weather is rainy.") preserved layout strictly better than a long constraint list for rain and fog — the constraint list's wetness clauses primed the model to invent ponds (4/4 seeds failed the water-gain gate), while the minimal prompt passed 4/4. Snow is the exception: the minimal prompt froze open sea on every seed (water-loss 0.87–1.0), so snow keeps explicit liquid-water and shoreline constraints (best water-loss 0.006). The lesson generalizes: negative instructions can induce the very content they forbid, so each constraint clause must earn its place on the verifier, per target.
 
-The submitted CLI exposes two editors. `Flux2KleinEditor` lazily loads the real Diffusers pipeline and invokes its native `image` input. `MockWeatherEditor` makes deterministic effects so reviewers can run all orchestration without weights. Both pass through identical decomposition, compositing, debug export, and metrics.
+Material response — diffuse cloud illumination on facades, wet-asphalt reflection, accumulation restricted to receptive surfaces — is delegated to the editor through target-specific prompt clauses rather than post-hoc tone curves. The verifier confirms the response happened where licensed. In production, a learned material-and-surface-orientation head would sharpen both the prompt policy and the target-specific verification thresholds, for example distinguishing upward-facing accumulation from vertical facades.
+
+The submitted CLI exposes two editors. `Flux2KleinEditor` lazily loads the real Diffusers pipeline and invokes its native `image` input. `MockWeatherEditor` makes deterministic effects so reviewers can run all orchestration without weights. Both pass through identical decomposition, verification, candidate selection, debug export, and metrics.
 
 ## Evaluation methodology
 
@@ -49,13 +51,13 @@ Use a scene-disjoint set with real clear/rain/snow/fog/overcast strata, hard cas
 | Realism | KID/FID against target-weather real sets at matched scene strata; no-reference artifact detector; blinded pairwise preference | “Could this be a real photograph, ignoring whether the event occurred?” |
 | Safety | Input/output policy classifiers; protected-content drift; provenance presence | “Could this output be deceptive or harmful in context?” |
 
-The included lightweight metrics report global appearance change, change weighted by strong and weak semantic support, and tolerant edge F1 near source structure. They are smoke tests, not substitutes for learned probes.
+The included lightweight metrics report global appearance change, change weighted by strong and weak semantic support, tolerant edge F1 near source structure, and three layout-drift gates (protected-instance gain, water loss, water gain). They are smoke tests, not substitutes for learned probes.
 
 ### Managing the three-way trade-off
 
 Treat model selection as a constrained Pareto problem rather than one weighted score. Begin with gates calibrated on human acceptability, for example: no OCR or object-count changes, edge displacement below a target-specific threshold, high source/output DINO correspondence, target-weather margin above a validated threshold, and no safety failure. Among passing candidates, rank realism and latency. Pixel identity is not a preservation gate for global weather because illumination, visibility, and material appearance should change across most of the frame.
 
-At runtime generate at most two seeded candidates. If edit fidelity fails but preservation passes, expand only the low-confidence weather support or increase conditioning. If preservation fails, reduce support/strength or reject; do not trade identity for a stronger storm. If realism fails, retry once with a different seed. Store only metrics and selected seed after the retention window. Offline, publish the complete Pareto frontier of edit success, leakage, realism, p50/p95 latency, and peak VRAM.
+At runtime generate a small seed batch (the demo uses four) and keep the best-verified candidate, preferring any gate-passing candidate over a higher-scoring failing one. If edit fidelity fails but preservation passes, strengthen the target prompt clause or increase conditioning. If preservation fails, retry a new seed or reject; do not trade identity for a stronger storm. If realism fails, retry once with a different seed. Store only metrics and selected seed after the retention window. Offline, publish the complete Pareto frontier of edit success, leakage, realism, p50/p95 latency, and peak VRAM.
 
 ## Consistency across related inputs
 

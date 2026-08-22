@@ -4,7 +4,7 @@
 
 The domain is **single outdoor RGB photographs with weather changed among clear, overcast, rain, snow, and fog**. It is a useful testbed because weather is neither a single object nor a global style. It couples sky appearance, depth-dependent atmospheric transmission, illumination, transient particles, and material response such as wet roads or snow accumulation. A successful system must therefore make meaningful local and global changes without moving a building edge, changing a face, corrupting text, or inventing a car. Those tensions expose attribute entanglement and preservation failures better than a simple recoloring task.
 
-The design generalizes to other edits by replacing the editable-layer ontology and domain probes while retaining the perception contract, conditioned editor, constrained compositor, and evaluation gates.
+The design generalizes to other edits by replacing the editable-layer ontology and domain probes while retaining the perception contract, conditioned editor, candidate verifier, and evaluation gates.
 
 ## Edit contract
 
@@ -24,6 +24,6 @@ The design generalizes to other edits by replacing the editable-layer ontology a
 5. Ambiguous conflicts resolve in favor of preservation. For example, snow behind a readable sign is preferred over plausible accumulation that corrupts the sign.
 6. The output is a visualization, not evidence of actual conditions. Production outputs carry provenance metadata and a visible disclosure where context requires it.
 7. Inference runs in a trusted environment. Raw inputs are not sent to a third-party model API in the proposed production design.
-8. The expected inference GPU is an NVIDIA L4 with 24 GiB VRAM. This workspace currently exposes no CUDA device, so real-model inference is integrated but not benchmarked here.
+8. The expected inference GPU is an NVIDIA L4 with 24 GiB VRAM; the included demo artifacts were generated on one.
 9. Model selection is current as of 22 August 2026 and must be revisited against the same evaluation set when newer checkpoints appear.
 10. No model weights, real sensitive samples, or generated claims about real events are included in this submission.

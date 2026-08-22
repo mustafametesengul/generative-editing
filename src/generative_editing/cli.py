@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument("--editor", choices=("mock", "flux"), default="mock")
     parser.add_argument("--decomposer", choices=("heuristic", "transformers"), default="heuristic")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--candidates", type=int, default=1, help="Seeded candidates to generate and verify")
     parser.add_argument("--cpu-offload", action="store_true", help="Offload FLUX components to CPU to reduce VRAM")
     parser.add_argument("--debug-dir", type=Path, help="Optional directory for decomposition masks")
     args = parser.parse_args()
@@ -35,7 +36,7 @@ def main() -> None:
         else HeuristicSceneDecomposer()
     )
     editor = Flux2KleinEditor(cpu_offload=args.cpu_offload) if args.editor == "flux" else MockWeatherEditor()
-    pipeline = WeatherEditingPipeline(decomposer, editor)
+    pipeline = WeatherEditingPipeline(decomposer, editor, candidates=args.candidates)
 
     with Image.open(args.input) as source:
         result = pipeline.run(source, Weather(args.weather), seed=args.seed)
@@ -44,4 +45,5 @@ def main() -> None:
     result.image.save(args.output)
     if args.debug_dir:
         result.save_debug_masks(args.debug_dir)
-    print(json.dumps(result.metrics.as_dict(), indent=2, sort_keys=True))
+    report = result.metrics.as_dict() | {"selected_seed": result.seed, "passed_preservation": result.passed}
+    print(json.dumps(report, indent=2, sort_keys=True))

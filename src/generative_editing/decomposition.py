@@ -28,6 +28,25 @@ WEATHER_SURFACE_NAMES = {
     "stone",
 }
 
+WATER_NAMES = {"lake", "river", "sea", "swimming pool", "water", "waterfall"}
+
+PROTECTED_NAMES = {
+    "airplane",
+    "bicycle",
+    "boat",
+    "bus",
+    "car",
+    "minibike",
+    "person",
+    "poster",
+    "ship",
+    "signboard",
+    "trade name",
+    "traffic light",
+    "truck",
+    "van",
+}
+
 
 class Weather(StrEnum):
     CLEAR = "clear"
@@ -109,6 +128,17 @@ class SceneDecomposition:
 class SceneDecomposer(Protocol):
     def decompose(self, image: Image.Image) -> SceneDecomposition: ...
 
+    def layout(self, image: Image.Image) -> SceneLayout: ...
+
+
+@dataclass(frozen=True)
+class SceneLayout:
+    """Boolean semantic layout used to verify candidates against the source."""
+
+    protected: np.ndarray
+    water: np.ndarray
+    sky: np.ndarray
+
 
 class HeuristicSceneDecomposer:
     """Weight-free fallback used for tests and offline pipeline demonstrations."""
@@ -152,6 +182,21 @@ class HeuristicSceneDecomposer:
             confidence=confidence,
         )
 
+    def layout(self, image: Image.Image) -> SceneLayout:
+        rgb = np.asarray(image.convert("RGB"), dtype=np.float32) / 255.0
+        height, width = rgb.shape[:2]
+        red, green, blue = np.moveaxis(rgb, -1, 0)
+        brightness = rgb.mean(axis=2)
+        vertical = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None]
+        blueish = (blue > red * 1.05) & (blue > green * 0.92) & (brightness > 0.25)
+        sky = blueish & np.broadcast_to(vertical < 0.5, (height, width))
+        water = blueish & np.broadcast_to(vertical >= 0.5, (height, width))
+        return SceneLayout(
+            protected=np.zeros((height, width), dtype=bool),
+            water=water,
+            sky=sky,
+        )
+
 
 class TransformerSceneDecomposer:
     """SegFormer plus Depth Anything V2 decomposition with lazy weight loading."""
@@ -178,47 +223,21 @@ class TransformerSceneDecomposer:
         rgb_image = image.convert("RGB")
         height, width = rgb_image.height, rgb_image.width
 
+        labels_np, confidence_np = self._segment(rgb_image)
         with torch.inference_mode():
-            seg_inputs = self.segmentation_processor(images=rgb_image, return_tensors="pt").to(self.device)
-            seg_logits = self.segmentation_model(**seg_inputs).logits
-            seg_logits = torch.nn.functional.interpolate(
-                seg_logits, size=(height, width), mode="bilinear", align_corners=False
-            )
-            probabilities = seg_logits.softmax(dim=1)[0]
-            confidence, labels = probabilities.max(dim=0)
-
             depth_inputs = self.depth_processor(images=rgb_image, return_tensors="pt").to(self.device)
             depth = self.depth_model(**depth_inputs).predicted_depth.unsqueeze(1)
             depth = torch.nn.functional.interpolate(
                 depth, size=(height, width), mode="bicubic", align_corners=False
             )[0, 0]
 
-        labels_np = labels.cpu().numpy()
-        confidence_np = confidence.cpu().numpy().astype(np.float32)
         depth_np = depth.cpu().numpy().astype(np.float32)
         id2label = self.segmentation_model.config.id2label
 
         sky = np.isin(labels_np, _label_ids(id2label, {"sky"})).astype(np.float32)
         weather_surface = np.isin(labels_np, _label_ids(id2label, WEATHER_SURFACE_NAMES)).astype(np.float32)
-        water_names = {"lake", "river", "sea", "swimming pool", "water", "waterfall"}
-        water = np.isin(labels_np, _label_ids(id2label, water_names)).astype(np.float32)
-        protected_names = {
-            "airplane",
-            "bicycle",
-            "boat",
-            "bus",
-            "car",
-            "minibike",
-            "person",
-            "poster",
-            "ship",
-            "signboard",
-            "trade name",
-            "traffic light",
-            "truck",
-            "van",
-        }
-        protected = np.isin(labels_np, _label_ids(id2label, protected_names)).astype(np.uint8)
+        water = np.isin(labels_np, _label_ids(id2label, WATER_NAMES)).astype(np.float32)
+        protected = np.isin(labels_np, _label_ids(id2label, PROTECTED_NAMES)).astype(np.uint8)
 
         far_likelihood = _far_likelihood(depth_np, sky)
         atmosphere = cv2.GaussianBlur(far_likelihood, (0, 0), sigmaX=2.0)
@@ -234,6 +253,27 @@ class TransformerSceneDecomposer:
             structure_guard=structure,
             confidence=confidence_np,
         )
+
+    def layout(self, image: Image.Image) -> SceneLayout:
+        labels_np, _ = self._segment(image.convert("RGB"))
+        id2label = self.segmentation_model.config.id2label
+        return SceneLayout(
+            protected=np.isin(labels_np, _label_ids(id2label, PROTECTED_NAMES)),
+            water=np.isin(labels_np, _label_ids(id2label, WATER_NAMES)),
+            sky=np.isin(labels_np, _label_ids(id2label, {"sky"})),
+        )
+
+    def _segment(self, rgb_image: Image.Image) -> tuple[np.ndarray, np.ndarray]:
+        torch = self._torch
+        with torch.inference_mode():
+            seg_inputs = self.segmentation_processor(images=rgb_image, return_tensors="pt").to(self.device)
+            seg_logits = self.segmentation_model(**seg_inputs).logits
+            seg_logits = torch.nn.functional.interpolate(
+                seg_logits, size=(rgb_image.height, rgb_image.width), mode="bilinear", align_corners=False
+            )
+            probabilities = seg_logits.softmax(dim=1)[0]
+            confidence, labels = probabilities.max(dim=0)
+        return labels.cpu().numpy(), confidence.cpu().numpy().astype(np.float32)
 
 
 def _top_connected(mask: np.ndarray) -> np.ndarray:

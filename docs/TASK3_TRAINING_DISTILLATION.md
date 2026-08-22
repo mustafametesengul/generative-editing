@@ -6,7 +6,7 @@ Fine-tune FLUX.2 Klein 4B for weather edits that improve target attainment witho
 
 ## Fine-tuning
 
-Start with rank-32 LoRA on the rectified-flow transformer attention and selected MLP projections; freeze the VAE and text encoder. Train a small zero-initialized conditioning adapter for sky, far-depth, material/orientation, and guard channels only if instruction tuning plus compositing underperforms. This minimizes catastrophic drift and keeps deployment modular. Mix ordinary generation/edit examples to preserve base capability. Optimize the native flow-matching objective plus weather classification, masked perceptual preservation, edge/OCR/identity consistency, material-response, and leakage penalties:
+Start with rank-32 LoRA on the rectified-flow transformer attention and selected MLP projections; freeze the VAE and text encoder. Train a small zero-initialized conditioning adapter for sky, far-depth, material/orientation, and guard channels only if instruction tuning plus verified selection underperforms. This minimizes catastrophic drift and keeps deployment modular. Mix ordinary generation/edit examples to preserve base capability. Optimize the native flow-matching objective plus weather classification, masked perceptual preservation, edge/OCR/identity consistency, material-response, and leakage penalties:
 
 $$
 \mathcal{L}=\mathcal{L}_{flow}+\lambda_e\mathcal{L}_{weather}+\lambda_p\mathcal{L}_{masked\text{-}LPIPS}+\lambda_g\mathcal{L}_{edge/OCR}+\lambda_m\mathcal{L}_{material}+\lambda_l\mathcal{L}_{leakage}.

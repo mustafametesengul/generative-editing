@@ -4,13 +4,17 @@
     "source": "urban.jpg",
     "result": "urban_rain.png",
     "target": "rain",
-    "seed": 11,
-    "observation": "Rain changes sky and surfaces; diffuse tone mapping reduces the measured facade sun/shadow ratio from 1.338 to 1.202 while retaining masonry detail.",
+    "candidates": 4,
+    "selected_seed": 14,
+    "passed_preservation": true,
     "metrics": {
-      "global_edit_mae": 0.10589982569217682,
-      "semantic_support_mae": 0.1430995911359787,
-      "structure_edge_f1": 0.8996199874882859,
-      "weak_support_mae": 0.08289946615695953
+      "global_edit_mae": 0.13380031287670135,
+      "protected_gain": 0.0,
+      "semantic_support_mae": 0.13555210828781128,
+      "structure_edge_f1": 0.8743602581343425,
+      "water_gain": 0.0,
+      "water_loss": 0.0,
+      "weak_support_mae": 0.12319429218769073
     }
   },
   {
@@ -18,13 +22,17 @@
     "source": "mountain.jpg",
     "result": "mountain_fog.png",
     "target": "fog",
-    "seed": 23,
-    "observation": "Fog attenuates distant terrain through the depth-conditioned generation matte while foreground geometry is retained.",
+    "candidates": 4,
+    "selected_seed": 25,
+    "passed_preservation": true,
     "metrics": {
-      "global_edit_mae": 0.11433872580528259,
-      "semantic_support_mae": 0.13006897270679474,
-      "structure_edge_f1": 0.6381759271536415,
-      "weak_support_mae": 0.06890665739774704
+      "global_edit_mae": 0.14746494591236115,
+      "protected_gain": 0.0,
+      "semantic_support_mae": 0.15415866672992706,
+      "structure_edge_f1": 0.48637510411047097,
+      "water_gain": 0.01823424442896936,
+      "water_loss": 0.0,
+      "weak_support_mae": 0.12131714820861816
     }
   },
   {
@@ -32,13 +40,17 @@
     "source": "coastal.jpg",
     "result": "coastal_snow.png",
     "target": "snow",
-    "seed": 37,
-    "observation": "Mountain-labeled islands and lighthouse-base rock receive accumulation; the sea remains liquid and invented foreground geometry is rejected.",
+    "candidates": 4,
+    "selected_seed": 54,
+    "passed_preservation": true,
     "metrics": {
-      "global_edit_mae": 0.18639490008354187,
-      "semantic_support_mae": 0.22016066312789917,
-      "structure_edge_f1": 0.9146859650991106,
-      "weak_support_mae": 0.15142862498760223
+      "global_edit_mae": 0.27872246503829956,
+      "protected_gain": 0.0,
+      "semantic_support_mae": 0.275444358587265,
+      "structure_edge_f1": 0.756073230619025,
+      "water_gain": 0.0031598471223021583,
+      "water_loss": 0.0064878743591035805,
+      "weak_support_mae": 0.2931458055973053
     }
   }
 ]

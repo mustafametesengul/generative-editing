@@ -1,16 +1,27 @@
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generative_editing.decomposition import HeuristicSceneDecomposer, Weather
-from generative_editing.editing import MockWeatherEditor, selective_composite, weather_prompt
+from generative_editing.decomposition import HeuristicSceneDecomposer, SceneLayout, Weather
+from generative_editing.editing import MockWeatherEditor, weather_prompt
+from generative_editing.evaluation import (
+    EditMetrics,
+    candidate_score,
+    evaluate_edit,
+    passes_preservation,
+)
 from generative_editing.pipeline import WeatherEditingPipeline
 
 
-def test_pipeline_edits_weather_and_preserves_outside_region(tmp_path) -> None:
+def _scene() -> Image.Image:
     source = Image.new("RGB", (160, 120), "#75b9ed")
     draw = ImageDraw.Draw(source)
     draw.rectangle((0, 60, 159, 119), fill="#648c45")
     draw.rectangle((55, 35, 105, 95), fill="#b94d3e")
+    return source
+
+
+def test_pipeline_edits_weather_and_preserves_outside_region(tmp_path) -> None:
+    source = _scene()
     pipeline = WeatherEditingPipeline(HeuristicSceneDecomposer(), MockWeatherEditor())
 
     result = pipeline.run(source, Weather.SNOW, seed=7)
@@ -24,45 +35,125 @@ def test_pipeline_edits_weather_and_preserves_outside_region(tmp_path) -> None:
     assert (tmp_path / "edit_matte.png").is_file()
 
 
-def test_compositor_applies_global_color_but_restores_guarded_detail() -> None:
-    source_array = np.full((64, 64, 3), 50, dtype=np.uint8)
-    source_array[:, 31:33] = 220
-    candidate_array = np.full((64, 64, 3), (100, 130, 170), dtype=np.uint8)
-    matte = np.ones((64, 64), dtype=np.float32)
-    guard = np.zeros((64, 64), dtype=np.float32)
-    guard[:, 29:35] = 1.0
+def test_pipeline_returns_generator_pixels_untouched() -> None:
+    source = _scene()
+    pipeline = WeatherEditingPipeline(HeuristicSceneDecomposer(), MockWeatherEditor())
 
-    result = np.asarray(
-        selective_composite(
-            Image.fromarray(source_array),
-            Image.fromarray(candidate_array),
-            matte,
-            guard,
-        )
+    result = pipeline.run(source, Weather.RAIN, seed=3)
+
+    expected = MockWeatherEditor().edit(source, Weather.RAIN, seed=3)
+    assert result.seed == 3
+    assert np.array_equal(np.asarray(result.image), np.asarray(expected))
+
+
+class _SeedKeyedEditor:
+    """Seed 0 destroys structure; seed 1 applies a gentle global tint."""
+
+    def edit(self, image: Image.Image, weather: Weather, seed: int) -> Image.Image:
+        rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
+        if seed % 2 == 0:
+            noise = np.random.default_rng(seed).uniform(0, 255, rgb.shape)
+            return Image.fromarray(noise.astype(np.uint8), mode="RGB")
+        return Image.fromarray(np.clip(rgb * 0.8 + 20.0, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def test_pipeline_selects_more_preserving_candidate() -> None:
+    source = _scene()
+    pipeline = WeatherEditingPipeline(HeuristicSceneDecomposer(), _SeedKeyedEditor(), candidates=2)
+
+    result = pipeline.run(source, Weather.OVERCAST, seed=0)
+
+    assert result.seed == 1
+
+
+def test_candidate_score_rejects_missing_edit() -> None:
+    unedited = EditMetrics(
+        global_edit_mae=0.001,
+        semantic_support_mae=0.001,
+        weak_support_mae=0.001,
+        structure_edge_f1=1.0,
+        protected_gain=0.0,
+        water_loss=0.0,
+        water_gain=0.0,
+    )
+    edited = EditMetrics(
+        global_edit_mae=0.08,
+        semantic_support_mae=0.10,
+        weak_support_mae=0.03,
+        structure_edge_f1=0.9,
+        protected_gain=0.0,
+        water_loss=0.0,
+        water_gain=0.0,
     )
 
-    assert np.allclose(result[20, 5], candidate_array[20, 5], atol=1)
-    assert result[20, 31].mean() > result[20, 28].mean() + 50
+    assert candidate_score(unedited) == float("-inf")
+    assert candidate_score(edited) > candidate_score(unedited)
 
 
-def test_compositor_rejects_generated_geometry_outside_receptive_regions() -> None:
-    source_array = np.full((64, 64, 3), 80, dtype=np.uint8)
-    candidate_array = np.full((64, 64, 3), 130, dtype=np.uint8)
-    candidate_array[20:44, 20:44] = 10
-    appearance_matte = np.ones((64, 64), dtype=np.float32)
-    generation_matte = np.zeros((64, 64), dtype=np.float32)
+def test_layout_drift_flags_added_people_and_land() -> None:
+    shape = (100, 100)
+    water = np.zeros(shape, dtype=bool)
+    water[60:, :] = True
+    empty = np.zeros(shape, dtype=bool)
+    source_layout = SceneLayout(protected=empty, water=water, sky=empty)
 
-    result = np.asarray(
-        selective_composite(
-            Image.fromarray(source_array),
-            Image.fromarray(candidate_array),
-            appearance_matte,
-            generation_matte=generation_matte,
-        )
-    )
+    added_person = empty.copy()
+    added_person[40:52, 45:50] = True
+    shrunk_water = water.copy()
+    shrunk_water[60:80, 30:70] = False
+    drifted_layout = SceneLayout(protected=added_person, water=shrunk_water, sky=empty)
 
-    assert result.mean() > source_array.mean()
-    assert np.abs(result[32, 32].astype(int) - result[5, 5].astype(int)).max() <= 1
+    new_pond = water.copy()
+    new_pond[20:50, 10:60] = True
+    ponded_layout = SceneLayout(protected=empty, water=new_pond, sky=empty)
+
+    image = Image.new("RGB", shape[::-1], "gray")
+    edited = Image.new("RGB", shape[::-1], "darkgray")
+    matte = np.ones(shape, dtype=np.float32)
+
+    clean = evaluate_edit(image, edited, matte, source_layout=source_layout, candidate_layout=source_layout)
+    drifted = evaluate_edit(image, edited, matte, source_layout=source_layout, candidate_layout=drifted_layout)
+    ponded = evaluate_edit(image, edited, matte, source_layout=source_layout, candidate_layout=ponded_layout)
+
+    assert clean.protected_gain == 0.0 and clean.water_loss == 0.0 and clean.water_gain == 0.0
+    assert drifted.protected_gain > 0.002
+    assert drifted.water_loss > 0.08
+    assert ponded.water_gain > 0.02
+    assert passes_preservation(clean)
+    assert not passes_preservation(drifted)
+    assert not passes_preservation(ponded)
+    assert candidate_score(drifted) < candidate_score(clean)
+    assert candidate_score(ponded) < candidate_score(clean)
+
+
+class _DriftKeyedEditor:
+    """Every seed darkens; the decomposer stub reports drift for even seeds."""
+
+    def edit(self, image: Image.Image, weather: Weather, seed: int) -> Image.Image:
+        rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
+        shade = 0.8 if seed % 2 else 0.79
+        result = Image.fromarray(np.clip(rgb * shade + 15.0, 0, 255).astype(np.uint8), mode="RGB")
+        result.info["seed"] = seed
+        return result
+
+
+class _DriftKeyedDecomposer(HeuristicSceneDecomposer):
+    def layout(self, image: Image.Image) -> SceneLayout:
+        layout = super().layout(image)
+        if image.info.get("seed", 1) % 2 == 0:
+            protected = layout.protected.copy()
+            protected[:20, :20] = True
+            return SceneLayout(protected=protected, water=layout.water, sky=layout.sky)
+        return layout
+
+
+def test_pipeline_prefers_gated_candidate_over_higher_score() -> None:
+    pipeline = WeatherEditingPipeline(_DriftKeyedDecomposer(), _DriftKeyedEditor(), candidates=2)
+
+    result = pipeline.run(_scene(), Weather.OVERCAST, seed=0)
+
+    assert result.seed == 1
+    assert result.passed
 
 
 def test_snow_prompt_preserves_water_and_object_inventory() -> None:
@@ -70,58 +161,11 @@ def test_snow_prompt_preserves_water_and_object_inventory() -> None:
 
     assert "remain liquid and unfrozen" in prompt
     assert "Do not add or remove people" in prompt
+    assert "land-water" in prompt
 
 
-def test_fog_attenuates_more_source_detail_than_snow() -> None:
-    source_array = np.full((64, 64, 3), 50, dtype=np.uint8)
-    source_array[:, 31:33] = 220
-    candidate_array = np.full((64, 64, 3), 170, dtype=np.uint8)
-    matte = np.ones((64, 64), dtype=np.float32)
-    guard = np.ones((64, 64), dtype=np.float32)
-
-    snow_like = np.asarray(
-        selective_composite(Image.fromarray(source_array), Image.fromarray(candidate_array), matte, guard)
-    )
-    fog_like = np.asarray(
-        selective_composite(
-            Image.fromarray(source_array),
-            Image.fromarray(candidate_array),
-            matte,
-            guard,
-            detail_strength=0.20,
-        )
-    )
-
-    snow_contrast = snow_like[:, 31:33].mean() - snow_like[:, 25:27].mean()
-    fog_contrast = fog_like[:, 31:33].mean() - fog_like[:, 25:27].mean()
-    assert fog_contrast < snow_contrast
-
-
-def test_rain_removes_warm_direct_sun_appearance_globally() -> None:
-    source_array = np.empty((64, 64, 3), dtype=np.uint8)
-    source_array[:, :32] = (210, 160, 90)
-    source_array[:, 32:] = (105, 80, 45)
-    candidate_array = np.empty((64, 64, 3), dtype=np.uint8)
-    candidate_array[:, :32] = (150, 160, 170)
-    candidate_array[:, 32:] = (75, 80, 85)
-    appearance_matte = np.full((64, 64), 0.75, dtype=np.float32)
-    generation_matte = np.zeros((64, 64), dtype=np.float32)
-
-    result = np.asarray(
-        selective_composite(
-            Image.fromarray(source_array),
-            Image.fromarray(candidate_array),
-            appearance_matte,
-            generation_matte=generation_matte,
-            weather=Weather.RAIN,
-        ),
-        dtype=np.float32,
-    )
-
-    source_luminance = source_array.mean(axis=2)
-    result_luminance = result.mean(axis=2)
-    source_ratio = source_luminance[:, :32].mean() / source_luminance[:, 32:].mean()
-    result_ratio = result_luminance[:, :32].mean() / result_luminance[:, 32:].mean()
-    assert result.mean() < source_array.mean() - 15.0
-    assert result_ratio < source_ratio - 0.35
-    assert (result[..., 0] - result[..., 2]).mean() < 60.0
+def test_non_snow_prompts_are_minimal() -> None:
+    for weather in (Weather.CLEAR, Weather.OVERCAST, Weather.RAIN, Weather.FOG):
+        prompt = weather_prompt(weather)
+        assert prompt.startswith("Keep everything the same")
+        assert "Do not" not in prompt
