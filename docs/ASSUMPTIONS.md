@@ -2,9 +2,9 @@
 
 ## Domain choice
 
-The domain is **single outdoor RGB photographs with weather changed among clear, overcast, rain, snow, and fog**. It is a useful testbed because weather is neither a single object nor a global style. It couples sky appearance, depth-dependent atmospheric transmission, illumination, transient particles, and material response such as wet roads or snow accumulation. A successful system must therefore make meaningful local and global changes without moving a building edge, changing a face, corrupting text, or inventing a car. Those tensions expose attribute entanglement and preservation failures better than a simple recoloring task.
+The domain is **single outdoor RGB photographs with weather changed among clear, overcast, rain, snow, and fog**. Weather is a good testbed because it is neither one object nor a global style: it couples sky appearance, depth-dependent visibility, illumination, transient particles, and material response (wet roads, snow cover). The system must change all of that without moving an edge, changing a face, corrupting text, or inventing an object — which exposes entanglement and preservation failures far better than a recoloring task.
 
-The design generalizes to other edits by replacing the editable-layer ontology and domain probes while retaining the perception contract, conditioned editor, candidate verifier, and evaluation gates.
+The design generalizes by swapping the editable-layer ontology and domain probes while keeping the perception contract, editor, verifier, and gates.
 
 ## Edit contract
 

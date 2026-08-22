@@ -3,75 +3,66 @@
 ## Architecture
 
 ```mermaid
-flowchart LR
-    A[RGB photograph] --> B[Decode, EXIF strip, quality and policy checks]
-    B --> C[SegFormer-B2 semantic logits]
-    B --> D[Depth Anything V2 relative depth]
-    B --> E[Edges plus OCR and instance guards]
-    C --> F[Ontology mapper]
-    D --> G[Far-field transmission prior]
-    E --> H[Hard and structural preserve masks]
-    F --> I[Decomposition fusion]
-    G --> I
-    H --> I
-    I --> J[Edit contract: masks, confidence, labels, depth]
-    J --> K{Confidence and OOD gate}
-    K -->|pass| L[Generative pipeline]
-    K -->|uncertain| M[Conservative mask or review]
+flowchart TD
+    A[RGB photograph] --> B[Decode, EXIF strip, policy checks]
+    B --> C[SegFormer-B2<br>semantics]
+    B --> D[Depth Anything V2<br>relative depth]
+    B --> E[Edges, OCR,<br>instance guards]
+    C --> F[Decomposition fusion]
+    D --> F
+    E --> F
+    F --> G[Edit contract:<br>mattes, guards, layout, confidence]
+    G --> H{Confidence / OOD gate}
+    H -->|pass| I[Task 2 pipeline]
+    H -->|uncertain| J[Conservative mask or review]
 ```
 
-The output contract contains soft masks for `sky`, `atmosphere`, `weather_surface`, and `structure_guard`, plus per-pixel confidence. It separates *where weather can manifest* from *what cannot move*. The generator receives the source and a controlled instruction; a verifier later uses this contract to score seeded candidates and gate acceptance. The same segmenter also produces a compact `SceneLayout` (protected instances, water, sky) for both source and each candidate, so the verifier can measure semantic drift — appeared people or vehicles, water turned to land, or new water over solid ground — that photometric metrics cannot see.
+The output contract has soft masks for `sky`, `atmosphere`, `weather_surface`, and `structure_guard`, plus per-pixel confidence: *where weather can manifest* versus *what cannot move*. The generator never sees these masks; a verifier uses them to score and gate candidates after generation. The same segmenter also produces a compact `SceneLayout` (protected instances, water, sky) for the source and each candidate, so the verifier can catch semantic drift — appeared people, water turned to land, new water over solid ground — that photometric metrics miss.
 
 ## Model choice and trade-offs
 
-**Chosen baseline.** SegFormer-B2 provides a hierarchical transformer encoder and lightweight MLP decoder. ADE20K labels already distinguish sky and weather-receptive classes such as road, grass, earth, sidewalk, and field. B2 is a pragmatic accuracy/latency point; B0 is the edge fallback and B5 is the server-quality option. Depth Anything V2 Small adds a 24.8M-parameter DINOv2-backed relative-depth estimate. Depth is essential because fog is a field whose strength should increase with distance, not a flat image overlay.
+**Baseline: SegFormer-B2 + Depth Anything V2 Small.** SegFormer's ADE20K labels already separate sky and weather-receptive surfaces (road, grass, earth, roof); B2 is the accuracy/latency sweet spot, B0 the edge fallback, B5 the server option. Depth is essential because fog strength must grow with distance rather than act as a flat overlay.
 
 | Option | Strength | Limitation | Decision |
 |---|---|---|---|
-| SegFormer | Efficient dense semantics; mature ONNX/TensorRT path | Closed ADE label set; thin objects are imperfect | Primary semantic model, fine-tuned on weather data |
-| Mask2Former/OneFormer | Strong boundaries and panoptic instances | Higher latency/memory | Offline teacher and hard-case fallback |
-| Promptable segmentation | Fast adaptation to new concepts | Requires prompts/detector and lacks weather ontology | Annotation accelerator, not sole runtime model |
-| Depth Anything V2 | Strong zero-shot relative depth at low cost | Scale and orientation are ambiguous | Fuse with sky/ground priors; never use as metric depth |
-| Image-level weather classifier | Cheap OOD and current-weather label | No localization | Auxiliary confidence and evaluation head |
+| SegFormer | Efficient dense semantics; mature TensorRT path | Closed label set; thin objects imperfect | Primary runtime model |
+| Mask2Former/OneFormer | Strong boundaries, panoptic instances | Higher latency/memory | Offline teacher, hard-case fallback |
+| Promptable segmentation | Fast adaptation to new concepts | Needs prompts; no weather ontology | Annotation accelerator only |
+| Depth Anything V2 | Cheap zero-shot relative depth | Scale/orientation ambiguous | Fuse with sky/ground priors; never metric |
+| Weather classifier | Cheap OOD and current-weather label | No localization | Auxiliary confidence head |
 
-The production profile runs segmentation and depth in parallel, exports them to TensorRT at FP16/INT8 after calibration, and caches decomposition by content hash. On constrained devices, SegFormer-B0 plus a quantized depth model produces the same contract at lower resolution; uncertain boundaries become less editable. Server batches group images by aspect bucket. Exact latency and throughput are release gates to be measured on L4, not inferred from model-card claims.
+Production: segmentation and depth run in parallel, exported to TensorRT FP16/INT8, decomposition cached by content hash. Constrained devices swap in B0 at lower resolution; uncertain boundaries become less editable. Latency numbers are release gates measured on the L4, not model-card claims.
 
 ## Automatic decomposition
 
-The ontology maps semantic logits into causal weather layers:
+Semantic logits map into causal weather layers:
 
-- `sky`: sky posterior, boundary-refined and restricted to top-connected components unless an indoor/open-roof case is detected.
-- `weather_surface`: ground and exposed terrain classes that can become wet or accumulate snow, including mountain, hill, rock, roof, earth, road, and vegetation. A learned material/orientation head eventually replaces this ADE-derived class list.
-- `atmosphere`: relative far-depth likelihood, regularized by sky and horizon. This controls fog and distant contrast.
-- `structure_guard`: static Canny/learned boundaries plus person, vehicle, text, sign, and logo instances. Edges inside sky and water are excluded as transient texture; their boundaries remain guarded. OCR polygons and face/plate detections are hard guards in production.
-- `confidence`: calibrated segmentation confidence multiplied by in-distribution and image-quality scores.
+- `sky`: sky posterior, restricted to top-connected components.
+- `weather_surface`: terrain classes that can become wet or hold snow (mountain, rock, roof, earth, road, vegetation). A learned material/orientation head eventually replaces this class list.
+- `atmosphere`: relative far-depth likelihood — drives fog and distant contrast.
+- `structure_guard`: static edges plus person/vehicle/text/sign instances. Edges inside sky and water are excluded as transient texture. OCR polygons and face/plate detections are hard guards in production.
+- `confidence`: calibrated segmentation confidence times in-distribution and quality scores.
 
-The critical fusion is implemented in `decomposition.py`. For target $w$, the prototype combines global weather support $g_w$ with stronger semantic support:
-
-$$
-M_w = \mathrm{blur}\left(g_w + (1-g_w)\max(\alpha_w S_{sky},\beta_w S_{surface},\gamma_w S_{far})C\right).
-$$
-
-The global term is essential: weather changes illumination and color across the frame, and snow can accumulate on many materials beyond a fixed ground-class list. Structure is therefore not removed from $M_w$. Instead, the structure guard $G$ tells the verifier where candidate edges must coincide with source edges; a candidate that moves guarded geometry is scored down and rejected rather than repainted. This preserves edge location without freezing the original lighting at those pixels.
-
-A second, narrower generation matte excludes the global floor:
+The fusion in `decomposition.py` builds two mattes per target $w$ from global support $g_w$, semantic supports $S$, and confidence $C$:
 
 $$
+M_w = \mathrm{blur}\left(g_w + (1-g_w)\max(\alpha_w S_{sky},\beta_w S_{surface},\gamma_w S_{far})C\right),
+\qquad
 R_w = \mathrm{blur}\left(\max(\hat\alpha_w S_{sky},\hat\beta_w S_{surface},\hat\gamma_w S_{far})C\right).
 $$
 
-$M_w$ licenses appearance change: change weighted by its complement is measured as leakage. $R_w$ licenses new spatial texture such as particles, cloud forms, and accumulation; texture change outside it — a model-invented foreground object or a frozen patch in open water — is flagged as a violation even when the global illumination shift is legitimate.
+The global floor $g_w$ exists because weather changes illumination everywhere. $M_w$ licenses appearance change — change weighted by its complement is leakage. $R_w$ licenses new spatial texture (particles, clouds, accumulation) — texture outside it, like an invented object or a frozen patch in open water, is a violation even when the illumination shift is legitimate. The structure guard $G$ marks where candidate edges must coincide with source edges; violating candidates are rejected, not repainted.
 
-This is interpretable and testable. The production successor learns the fusion head from paired change masks while retaining explicit channels and monotonic constraints. Weak labels come from aligned before/after imagery: unchanged DINO features and optical-flow-consistent edges supervise preservation; changed, weather-correlated regions supervise edit support. A small gold set calibrates rather than hand-labeling every image.
+The split is automatic (no per-image labeling) and the production successor learns the fusion head from weak labels: aligned before/after pairs supervise editable regions through exposure-compensated difference masks, while unchanged DINO features and flow-consistent edges supervise preservation. A small gold set calibrates.
 
 ## Data strategy
 
-1. Assemble licensed adverse-weather and driving-scene datasets plus consented general outdoor photography. Stratify by geography, urban/rural scene, camera, day/night, target weather, and people/vehicle presence.
-2. Label 2,000-5,000 diverse frames with sky, receptive surfaces, hard-protected instances, horizon, weather, and ambiguity flags. Double-label the 15% hardest examples and adjudicate boundary disagreements.
-3. Produce pseudo-labels on the larger pool using an ensemble of panoptic segmentation, depth, OCR, and promptable segmentation. Keep soft posteriors; discard low-agreement examples.
-4. Mine naturally aligned webcam/burst pairs and geometrically register them. Difference masks after exposure compensation provide weak editable-region supervision.
-5. Add physically rendered fog, rain, and snow over depth-equipped synthetic scenes, then keep real data dominant in validation and at least 50% of fine-tuning batches to prevent synthetic texture shortcuts.
-6. Use active learning on high entropy, model disagreement, preservation-gate failures, and rare strata. Track source licenses and prevent scene-level leakage across splits.
+1. License adverse-weather/driving datasets plus consented outdoor photography; stratify by geography, scene, camera, day/night, target weather, and people/vehicle presence.
+2. Hand-label 2,000–5,000 diverse frames (sky, receptive surfaces, protected instances, ambiguity flags); double-label the hardest 15%.
+3. Pseudo-label the larger pool with a panoptic + depth + OCR ensemble; keep soft posteriors, drop low-agreement examples.
+4. Mine aligned webcam/burst pairs; exposure-compensated difference masks give weak editable-region supervision.
+5. Render physical fog/rain/snow over synthetic scenes with exact masks, but keep real data at ≥50% of batches to prevent texture shortcuts.
+6. Actively sample high-entropy, gate-failure, and rare-stratum cases; prevent scene leakage across splits.
 
 ## Failure modes and handling
 
@@ -88,4 +79,4 @@ This is interpretable and testable. The production successor learns the fusion h
 
 ## Privacy and retention
 
-Decode and policy checks happen in the trusted ingress service; EXIF/GPS is stripped immediately. Perception and generation are local. Raw images and reversible latents are encrypted in a short-lived object store and deleted after the configured job TTL. Masks, embeddings, depth, OCR boxes, and generator latents still reveal silhouettes, scene layout, or identifiers, so they inherit the raw image access policy and are not treated as anonymous. Logs contain model versions, coarse metrics, and salted job IDs, never pixels or prompts with user metadata. Face/plate embeddings are computed only when required for a preservation probe and discarded after gating.
+EXIF/GPS is stripped at ingress; perception and generation run locally, never through third-party APIs. Raw images and reversible latents live encrypted in a short-lived store and are deleted at job TTL. Masks, embeddings, depth, and OCR boxes still reveal silhouettes and identifiers, so they inherit the raw-image access policy — they are not anonymous. Logs keep model versions, coarse metrics, and salted job IDs only. Face/plate embeddings exist only during preservation gating, then are discarded.
