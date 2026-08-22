@@ -1,6 +1,6 @@
 # Selective Weather Editing
 
-Technical assessment submission for structured attribute detection and controllable generative editing. The chosen domain is **weather transformation in outdoor photographs**: change sky, visibility, precipitation, and weather-dependent surface appearance while preserving camera, geometry, object identity, text, and scene layout. The generator owns every output pixel; the Task 1 decomposition acts as a verification contract that scores and selects seeded candidates instead of compositing them.
+Technical assessment submission for structured attribute detection and controllable generative editing. The chosen domain is **weather transformation in outdoor photographs**: change sky, visibility, precipitation, and weather-dependent surface appearance while preserving camera, geometry, object identity, text, and scene layout. The generator owns every output pixel; the Task 1 decomposition acts as a verification contract that scores seeded candidates, hard-gates semantic drift (added people or vehicles, altered land-water boundaries), and selects the best passing candidate instead of compositing pixels.
 
 ## Deliverables
 
@@ -43,7 +43,7 @@ uv run generative-editing input.jpg output.jpg \
 	--weather rain \
 	--editor flux \
 	--decomposer transformers \
-	--candidates 2 \
+	--candidates 4 \
 	--debug-dir artifacts/masks
 ```
 
