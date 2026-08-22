@@ -2,28 +2,28 @@
 
 ## Domain choice
 
-The domain is **single outdoor RGB photographs with weather changed among clear, overcast, rain, snow, and fog**. Weather is a good testbed because it is neither one object nor a global style: it couples sky appearance, depth-dependent visibility, illumination, transient particles, and material response (wet roads, snow cover). The system must change all of that without moving an edge, changing a face, corrupting text, or inventing an object — which exposes entanglement and preservation failures far better than a recoloring task.
+The domain is **single outdoor photos with the weather changed** — clear, overcast, rain, snow, or fog. Weather is a good testbed because it is neither one object nor a global style: it touches the sky, visibility over distance, lighting, falling particles, and how surfaces look (wet roads, snow cover). The system has to change all of that without moving an edge, changing a face, breaking text, or inventing an object — which surfaces preservation failures much better than a simple recoloring task.
 
-The design generalizes by swapping the editable-layer ontology and domain probes while keeping the perception contract, editor, verifier, and gates.
+The design carries over to other domains by swapping what counts as editable and how it is checked; the perception contract, editor, verifier, and gates stay the same.
 
 ## Edit contract
 
 | Category | Attributes |
 |---|---|
-| Editable | Sky/cloud state; precipitation; depth-dependent fog/visibility; diffuse illumination and color temperature; weather response on receptive surfaces (wetness, puddle-like reflection, snow cover). |
-| Hard invariant | Camera viewpoint and crop; object count, identity, pose, and location; geometry and silhouettes; faces; text, signs, logos, and license plates. |
-| Soft invariant | Base material identity and albedo, local texture, fine edges, and scene semantics. Their observed intensity may change under new illumination or occlusion, but structure must not. |
-| Out of scope | Time-of-day or season change; adding/removing objects; physically certified weather simulation; meteorological reconstruction; forensic or evidentiary use. |
+| Editable | Sky and clouds; precipitation; fog and visibility; overall lighting and color temperature; how surfaces respond (wetness, reflections, snow cover). |
+| Hard invariant | Camera viewpoint and crop; object count, identity, pose, and position; geometry and silhouettes; faces; text, signs, logos, license plates. |
+| Soft invariant | Materials, local texture, fine edges, and scene meaning. Their brightness and color may shift with the new lighting, but their structure must not. |
+| Out of scope | Time-of-day or season changes; adding or removing objects; physically accurate weather simulation; forensic or evidentiary use. |
 
 ## Assumptions
 
-1. Inputs are licensed or user-owned photographs. A frame may incidentally contain people or vehicle identifiers, so it is treated as sensitive during processing.
-2. The main path handles one image up to about one megapixel. Bursts and video use the consistency extension described in Task 2.
-3. The requested target is one of five controlled labels, not unrestricted editing text. Edit intensity is a future scalar control.
-4. There is no unique ground-truth output. Evaluation uses target attainment, invariance, realism, and human pairwise judgments rather than pixel matching to one target.
-5. Ambiguous conflicts resolve in favor of preservation. For example, snow behind a readable sign is preferred over plausible accumulation that corrupts the sign.
-6. The output is a visualization, not evidence of actual conditions. Production outputs carry provenance metadata and a visible disclosure where context requires it.
-7. Inference runs in a trusted environment. Raw inputs are not sent to a third-party model API in the proposed production design.
-8. The expected inference GPU is an NVIDIA L4 with 24 GiB VRAM; the included demo artifacts were generated on one.
-9. Model selection is current as of 22 August 2026 and must be revisited against the same evaluation set when newer checkpoints appear.
-10. No model weights, real sensitive samples, or generated claims about real events are included in this submission.
+1. Inputs are licensed or user-owned photos. They may incidentally contain people or license plates, so everything is treated as sensitive.
+2. The main path handles one image up to about one megapixel. Bursts and video use the consistency extension in Task 2.
+3. The request is one of five fixed weather targets, not free editing text. An intensity slider is future work.
+4. There is no single correct output. Evaluation asks: did the weather change, did everything else stay, does it look real — plus human side-by-side judgments.
+5. When in doubt, preserve. Snow hidden behind a readable sign beats plausible snow that breaks the sign.
+6. Outputs are visualizations, not records of real conditions. Production outputs carry provenance metadata and a visible disclosure where needed.
+7. Inference runs locally in a trusted environment; raw inputs never go to a third-party API.
+8. The inference GPU is an NVIDIA L4 (24 GiB); the demo artifacts were generated on one.
+9. Model choices are current as of 22 August 2026 and should be re-checked against the same benchmark when new checkpoints appear.
+10. No model weights, sensitive samples, or claims about real events are included in this submission.
