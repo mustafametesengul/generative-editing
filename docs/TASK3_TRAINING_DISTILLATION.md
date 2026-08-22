@@ -2,19 +2,19 @@
 
 ## Data
 
-Build ~50k licensed tuples: 40% registered real before/after or burst pairs, 30% real images with teacher-generated candidates that passed the preservation gates and human review, 30% physically rendered synthetic pairs with exact masks. Keep ≥50% real per batch. Attach weather labels, decomposition channels, guards, and provenance. Hold out entire locations, sessions, and cameras; keep a small adjudicated “red” set (night, reflections, occlusion, ambiguous boundaries).
+Build ~50k licensed training examples: 40% real photo pairs of the same scene in different weather, 30% real photos with teacher-model edits that passed the gates and a human check, 30% synthetic renders with exact masks. Keep at least half of every batch real. Hold out entire locations and cameras for testing, plus a hand-picked set of hard cases (night, reflections, occlusion, ambiguous boundaries).
 
 ## Fine-tuning
 
-Rank-32 LoRA on the rectified-flow transformer attention/MLP projections; VAE and text encoder frozen. A zero-initialized conditioning adapter on decomposition channels is added only if prompting plus verified selection underperforms. Mix generic edit examples to preserve base capability. Loss: native flow matching plus weather-classification, masked-LPIPS preservation, edge/OCR/identity, and leakage penalties. Run a 10k-example pilot first; promote only if it moves the edit-vs-preservation Pareto frontier on real validation data. Full fine-tuning is a last resort after LoRA saturates.
+Rank-32 LoRA on the transformer's attention/MLP layers; the VAE and text encoder stay frozen. A conditioning adapter for the decomposition channels is added only if prompting plus selection stops being enough. Mix in generic editing examples so the model keeps its base skills. Loss: the native flow-matching loss plus penalties for wrong weather, damaged structure/text/identity, and leakage. Pilot on 10k examples first; scale up only if the pilot actually improves the edit-vs-preservation trade-off. Full fine-tuning is a last resort.
 
 ## Distillation
 
-Use the accepted four-step model as teacher and train a two-step student (same 4B first, then a 2B width-reduced variant) with consistency/trajectory distillation, keeping the preservation losses so the student does not get fast by ignoring source detail. Then weight-only INT8/FP8 where the L4 supports it, VAE-sensitive layers at FP16/BF16, TensorRT compile, per-stratum calibration. Quantization is accepted on task metrics, not reconstruction error.
+The fine-tuned four-step model becomes the teacher for a two-step student (same 4B size first, a smaller 2B later) trained with consistency distillation. Keep the preservation losses during distillation — otherwise the student gets fast by ignoring the source. Then INT8/FP8 quantization where the L4 supports it (VAE-sensitive layers stay FP16/BF16) and a TensorRT build. Quantization is judged on task metrics, not reconstruction error.
 
 ## Evaluation loop
 
-Every candidate rebuild reruns the frozen suite: target-weather success, masked LPIPS/SSIM, edge/OCR/identity consistency, layout-drift gates, KID, human pairwise preference, p50/p95 latency, peak VRAM. Hard regressions in text, identity, object count, or safety block release. A shadow deployment feeds consented failures into the active-learning queue; retraining is monthly at first, then drift-triggered. Base model, LoRA, student, engine, and data snapshot are independently versioned for rollback.
+Every candidate build reruns the frozen suite: weather success, preservation metrics, drift gates, realism, human preference, latency, and VRAM. Regressions in text, identity, object count, or safety block the release. Failures from production feed the next training round; model, LoRA, student, engine, and data snapshot are versioned separately so rollback is one step.
 
 ## Budget and risk
 
@@ -26,4 +26,4 @@ Every candidate rebuild reruns the frozen suite: target-weather success, masked 
 | Two-step distillation | 8×A100/H100 × 72 h | After teacher promotion |
 | TensorRT calibration + eval | 2–4 L4s × 1–2 days | Every release candidate |
 
-The riskiest step is distillation: few-step students lose subtle source conditioning before aggregate realism drops. Mitigation: distill only from a strong teacher, keep explicit preservation losses, evaluate per hard stratum, and ship the four-step path if the two-step student misses any gate. Training runs on A100/H100; the L4 stays the inference target.
+The riskiest step is distillation: few-step students tend to lose subtle source details before overall image quality visibly drops. Mitigations: distill only from a strong teacher, keep the preservation losses, evaluate the hard cases separately, and ship the four-step model if the two-step one misses any gate. Training runs on A100/H100; the L4 stays the inference target.

@@ -2,7 +2,7 @@
 
 All edits use transformer decomposition, `black-forest-labs/FLUX.2-klein-4B`, four inference steps, and an NVIDIA L4. Each case generates four seeded candidates; the verifier scores them against the Task 1 contract, hard-gates semantic drift (added people/vehicles, water turned to land, new water over solid ground), and keeps the best passing candidate.
 
-The edit matte licenses appearance change and defines leakage through its complement. The generation matte marks where new spatial texture is licensed. A per-candidate segmentation layout provides the drift gates.
+The edit matte shows where change is allowed — change elsewhere counts against the candidate. The generation matte shows where new texture like snow or rain particles may appear. A per-candidate segmentation feeds the drift gates.
 
 ![Source, result, appearance matte, and generation matte](contact_sheet.jpg)
 

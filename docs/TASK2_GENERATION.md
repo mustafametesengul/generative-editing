@@ -4,18 +4,18 @@
 
 ```mermaid
 flowchart TD
-    A[Source photograph] --> B[Task 1 decomposition]
-    A --> C[FLUX.2 Klein 4B<br>full-frame edit, K seeds]
-    D[Weather target] --> E[Per-target prompt policy]
+    A[Source photo] --> B[Task 1 decomposition]
+    A --> C[FLUX.2 Klein 4B]
+    D[Weather target] --> E[Prompt policy]
     E --> C
-    C --> F[Candidates]
-    B --> G[Verifier:<br>photometric checks + layout drift gates]
+    C --> F[K candidates]
+    B --> G[Verifier]
     F --> G
-    G -->|best passing candidate| H[Provenance + output]
-    G -->|all fail| I[Retry new seeds or reject]
+    G -->|best passing| H[Output + provenance]
+    G -->|all fail| I[Retry or reject]
 ```
 
-**Selected checkpoint:** [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — a 4B rectified-flow transformer with native image editing, four-step distilled inference, Apache 2.0 license, and a ~13 GiB footprint that fits an L4 beside the perception models. Alternatives: Qwen-Image-Edit-2511 (20B) is strong but needs 40 steps and does not fit an L4 in BF16; FLUX.1 Kontext (12B) is gated and non-commercial; Klein 9B is non-commercial. The choice is an evaluation hypothesis — any replacement must beat it on the frozen weather benchmark.
+**Selected checkpoint:** [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — a 4B rectified-flow transformer with native image editing, four-step inference, an Apache 2.0 license, and a ~13 GiB footprint that fits an L4 next to the perception models. Alternatives: Qwen-Image-Edit-2511 (20B) is strong but needs 40 steps and doesn't fit an L4 in BF16; FLUX.1 Kontext (12B) and Klein 9B are non-commercial. The choice is a hypothesis — any replacement has to beat it on the frozen benchmark.
 
 ## Family comparison
 
@@ -28,19 +28,19 @@ flowchart TD
 
 ## Generate, verify, select
 
-Rectified flow is a transformer-based family allowed by the brief; its straighter denoising trajectory reaches target latency at four steps. The generator owns every output pixel:
+Rectified flow is transformer-based (allowed by the brief) and reaches the latency target at four steps. The generator owns every output pixel:
 
-1. **Generate** K full-frame candidates (demo: 4 seeds). No masks are given to the model.
-2. **Verify** each candidate against the Task 1 contract: edit strength inside the edit matte, leakage in its complement, edge F1 near the structure guard — plus hard *layout-drift gates* from re-segmenting the candidate: appeared people/vehicles, water turned solid, new water over solid ground. The semantic gates exist because MAE and edge metrics cannot tell "snow on water" from "new land".
-3. **Select** the best passing candidate and return it; if none passes, retry new seeds or reject.
+1. **Generate** K full-frame candidates (the demo uses 4 seeds). The model gets only the photo and the prompt — no masks.
+2. **Verify** each one: did the weather actually change inside the edit matte, how much changed where it shouldn't, did guarded edges stay put — plus hard gates from re-segmenting the candidate: no new people or vehicles, no water turned into land, no new ponds. The semantic gates exist because pixel metrics can't tell "snow on water" from "new land".
+3. **Select** the best passing candidate. If none passes, retry with new seeds or reject.
 
-**Prompt policy.** The instruction is per-target and tuned on the verifier. A/B runs showed the minimal prompt ("Keep everything the same, except that the weather is rainy.") preserves layout strictly better than a constraint list for rain and fog — the list's wetness clauses primed the model to invent ponds (4/4 seeds failed). Snow is the exception: the minimal prompt froze open sea on every seed (water-loss 0.87–1.0), so snow keeps explicit liquid-water constraints (best 0.006). Lesson: negative instructions can induce the content they forbid, so each clause must earn its place empirically.
+**Prompts.** Each weather target has its own prompt, chosen by measuring rather than guessing. In A/B runs the short prompt ("Keep everything the same, except that the weather is rainy.") preserved the scene better than a long list of rules for rain and fog — the long prompt's talk of wetness made the model paint ponds in 4/4 seeds. Snow is the opposite: the short prompt froze the entire sea every time, so snow keeps its explicit "water stays liquid" instructions. Takeaway: telling the model *not* to do something can plant the idea, so every prompt clause has to prove itself against the verifier.
 
-The CLI ships two editors behind one protocol: `Flux2KleinEditor` (real Diffusers pipeline) and `MockWeatherEditor` (deterministic, weight-free), both running identical decomposition, verification, and selection.
+The CLI ships two editors behind one protocol: `Flux2KleinEditor` (real Diffusers pipeline) and `MockWeatherEditor` (deterministic, no weights), both running the same decomposition, verification, and selection.
 
 ## Evaluation methodology
 
-Use a scene-disjoint set with real strata for all five targets, hard cases from Task 1, and human acceptability labels. Report metrics per target, scene type, and OOD bucket — never only an average.
+Evaluate on a held-out set with real examples of all five weather types, the hard cases from Task 1, and human ratings. Report results per weather target and scene type, not just one average.
 
 | Axis | Automated measurements | Human question |
 |---|---|---|
@@ -51,21 +51,21 @@ Use a scene-disjoint set with real strata for all five targets, hard cases from 
 
 The shipped metrics (support-weighted MAE, edge F1, three drift gates) are smoke tests, not substitutes for learned probes.
 
-### Managing the three-way trade-off
+### Edit vs. preservation vs. realism
 
-Treat it as a constrained Pareto problem, not one weighted score. Preservation and safety are gates calibrated on human acceptability (no object-count/OCR changes, bounded edge displacement, drift gates); among passing candidates, rank edit fidelity and realism. Pixel identity is deliberately not a gate — weather legitimately changes illumination across most of the frame. At runtime: generate a small seed batch, prefer any gate-passing candidate over a higher-scoring failing one; if edit fidelity fails, strengthen the prompt clause; if preservation fails, retry a new seed or reject — never trade identity for a stronger storm.
+Gates plus ranking, not one blended score. Preservation and safety are hard gates (no object-count or text changes, bounded edge movement, the drift gates); among candidates that pass, rank by edit strength and realism. Pixel identity is deliberately not a gate — weather legitimately changes lighting across most of the frame. If the edit is too weak, strengthen the prompt; if preservation fails, try another seed or reject — never trade identity for a stronger storm.
 
 ## Consistency across related inputs
 
-For bursts/video: estimate camera motion and optical flow, warp the previous decomposition and noise initialization into the next frame, share the weather embedding and precipitation trajectory over a short temporal window, and add temporal losses on flow-warped features and edges. Render particles in camera/world coordinates rather than per frame; detect cuts before propagating. For unordered views of one place, share a scene/weather ID and measure cross-view consistency. Single-image requests claim no temporal guarantees.
+For video or bursts: estimate camera motion and optical flow, carry the decomposition and noise initialization from frame to frame, share the weather target across a short window, and keep particles consistent in 3D instead of re-rolling them per frame. Detect cuts before propagating anything. For unordered photos of one place, share the weather target and check consistency across views. Single images make no temporal promises.
 
 ## Scalability and operations
 
-- Perception as TensorRT FP16/INT8 services; the four-step BF16 generator as a long-lived worker. Batch size one for interactive latency; aspect-bucketed batches offline.
-- L4 is the inference baseline (~13 GiB for Klein 4B); CPU offload is a compatibility mode. A100/H100 only for training, distillation, and bulk evaluation.
-- Cache decompositions per encrypted job and delete with source data. Queue by pixel count; backpressure before OOM.
-- Canary each model version on the frozen suite, then staged traffic with automatic rollback on preservation, safety, or latency regression.
+- Perception runs as TensorRT FP16/INT8 services; the four-step generator as a long-lived BF16 worker. Batch size one for interactive use, small batches offline.
+- L4 is the inference baseline; CPU offload is a compatibility mode. A100/H100 only for training and bulk evaluation.
+- Decompositions are cached per encrypted job and deleted with the source. Queue by pixel count; apply backpressure before running out of memory.
+- New model versions go through the frozen suite, then staged traffic with automatic rollback on any preservation, safety, or latency regression.
 
 ## Misuse controls
 
-Weather editing can fabricate storm/flood evidence, unsafe road conditions, or concealed time/location. Controls: restrict the API to enumerated weather targets (no free text), scan for documentary/evidentiary contexts and block claims-oriented use, rate-limit and audit, attach C2PA provenance plus model/edit metadata, watermark as defense in depth, and disclose synthesis in the UI. High-impact enterprise use requires purpose review and human approval; provenance and policy enforcement remain primary because watermarks alone do not make misuse safe.
+Weather editing can fabricate storm or flood evidence, unsafe road conditions, or hide when and where a photo was taken. Controls: the API only accepts the five weather targets (no free text), documentary or evidentiary content is flagged and blocked from claims-style use, requests are rate-limited and audited, outputs carry C2PA provenance plus model/edit metadata and a watermark, and the UI discloses that the weather is synthetic. High-impact enterprise use needs purpose review and human approval — watermarks alone don't make misuse safe.
