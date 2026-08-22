@@ -1,0 +1,2 @@
+artifacts/weather_demo/**/*.png filter=lfs diff=lfs merge=lfs -text
+artifacts/weather_demo/**/*.jpg filter=lfs diff=lfs merge=lfs -text

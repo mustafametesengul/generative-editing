@@ -10,6 +10,7 @@ Technical assessment submission for structured attribute detection and controlla
 - [Task 3: training and distillation](docs/TASK3_TRAINING_DISTILLATION.md)
 - Task 1 prototype: `src/generative_editing/decomposition.py`
 - Task 2 prototype: `src/generative_editing/editing.py`, `pipeline.py`, and `evaluation.py`
+- [L4 inference demo: sources, edits, masks, metrics, and attribution](artifacts/weather_demo/README.md)
 
 ## Setup and checks
 
