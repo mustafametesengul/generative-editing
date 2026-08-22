@@ -87,15 +87,54 @@ class MockWeatherEditor:
         return Image.fromarray(np.clip(result, 0, 255).astype(np.uint8), mode="RGB")
 
 
-def selective_composite(original: Image.Image, candidate: Image.Image, matte: np.ndarray) -> Image.Image:
-    """Blend only decomposed weather regions back into the source photograph."""
+def selective_composite(
+    original: Image.Image,
+    candidate: Image.Image,
+    appearance_matte: np.ndarray,
+    structure_guard: np.ndarray | None = None,
+    generation_matte: np.ndarray | None = None,
+    detail_strength: float = 1.0,
+) -> Image.Image:
+    """Transfer weather globally while limiting generated spatial content."""
     source = np.asarray(original.convert("RGB"), dtype=np.float32)
     edited = np.asarray(candidate.convert("RGB").resize(original.size), dtype=np.float32)
-    if matte.shape != source.shape[:2]:
-        raise ValueError("Edit matte dimensions must match the source image")
-    alpha = np.clip(matte, 0.0, 1.0)[..., None].astype(np.float32)
-    composite = source * (1.0 - alpha) + edited * alpha
+    if appearance_matte.shape != source.shape[:2]:
+        raise ValueError("Appearance matte dimensions must match the source image")
+    appearance_alpha = np.clip(appearance_matte, 0.0, 1.0)[..., None].astype(np.float32)
+    if generation_matte is None:
+        generation_alpha = appearance_alpha
+    else:
+        if generation_matte.shape != source.shape[:2]:
+            raise ValueError("Generation matte dimensions must match the source image")
+        generation_alpha = np.clip(generation_matte, 0.0, 1.0)[..., None].astype(np.float32)
+
+    relit_source = _color_transfer(source, edited)
+    photometric_base = source * (1.0 - appearance_alpha) + relit_source * appearance_alpha
+    composite = photometric_base + generation_alpha * (edited - relit_source)
+
+    if structure_guard is not None:
+        if structure_guard.shape != source.shape[:2]:
+            raise ValueError("Structure guard dimensions must match the source image")
+        guard = cv2.GaussianBlur(
+            np.clip(structure_guard, 0.0, 1.0).astype(np.float32),
+            (0, 0),
+            sigmaX=1.2,
+        )[..., None]
+        source_detail = source - cv2.GaussianBlur(source, (0, 0), sigmaX=2.0)
+        edited_detail = edited - cv2.GaussianBlur(edited, (0, 0), sigmaX=2.0)
+        composite += detail_strength * generation_alpha * guard * (source_detail - edited_detail)
+
     return Image.fromarray(np.clip(composite, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def _color_transfer(source: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    source_mean = source.mean(axis=(0, 1), keepdims=True)
+    reference_mean = reference.mean(axis=(0, 1), keepdims=True)
+    source_std = source.std(axis=(0, 1), keepdims=True)
+    reference_std = reference.std(axis=(0, 1), keepdims=True)
+    scale = np.clip(reference_std / np.maximum(source_std, 1e-6), 0.70, 1.30)
+    shift = np.clip(reference_mean - source_mean, -48.0, 48.0)
+    return (source - source_mean) * scale + source_mean + shift
 
 
 def weather_prompt(weather: Weather) -> str:
@@ -103,13 +142,18 @@ def weather_prompt(weather: Weather) -> str:
         Weather.CLEAR: "clear blue-sky weather with crisp visibility and natural sunlight",
         Weather.OVERCAST: "realistic overcast weather with a continuous cloud layer and soft diffuse light",
         Weather.RAIN: "realistic rainy weather with wet ground, rain streaks, cloud cover, and coherent reflections",
-        Weather.SNOW: "realistic snowy weather with falling snow and physically plausible snow accumulation",
+        Weather.SNOW: (
+            "realistic snowy weather with falling snow and fresh accumulation only on upward-facing solid "
+            "surfaces such as roofs, rocks, vegetation, and land; existing rivers, lakes, and seas remain "
+            "liquid and unfrozen"
+        ),
         Weather.FOG: "realistic fog with depth-dependent atmospheric scattering and reduced distant visibility",
     }
     return (
         f"Change only the weather to {descriptions[weather]}. Preserve the exact camera viewpoint, crop, "
         "scene geometry, object count and placement, people and object identities, text, logos, architecture, "
-        "and fine edges. Do not add or remove objects. Keep this a photorealistic edit of the same photograph."
+        "and fine edges. Do not add or remove people, birds, animals, vehicles, boats, buildings, or any other "
+        "objects. Keep this a photorealistic edit of the same photograph."
     )
 
 

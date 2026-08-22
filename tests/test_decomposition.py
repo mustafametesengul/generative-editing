@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generative_editing.decomposition import HeuristicSceneDecomposer, Weather
+from generative_editing.decomposition import HeuristicSceneDecomposer, Weather, _build_structure_guard
 
 
 def synthetic_scene() -> Image.Image:
@@ -25,9 +25,25 @@ def test_edit_mattes_are_bounded_and_weather_specific() -> None:
     decomposition = HeuristicSceneDecomposer().decompose(synthetic_scene())
     rain = decomposition.edit_matte(Weather.RAIN)
     snow = decomposition.edit_matte(Weather.SNOW)
+    snow_generation = decomposition.generation_matte(Weather.SNOW)
     fog = decomposition.edit_matte(Weather.FOG)
 
     assert np.isfinite(rain).all()
     assert 0.0 <= rain.min() <= rain.max() <= 1.0
     assert snow[110, 10] > rain[110, 10]
-    assert fog[60, 20] > rain[60, 20]
+    assert snow.min() >= 0.54
+    assert snow_generation.min() < 0.20
+    assert fog[20, 20] > fog[110, 20]
+
+
+def test_structure_guard_ignores_transient_sky_texture() -> None:
+    edges = np.zeros((32, 32), dtype=np.uint8)
+    edges[8, 8:24] = 255
+    edges[24, 8:24] = 255
+    sky = np.zeros((32, 32), dtype=np.float32)
+    sky[:16] = 1.0
+
+    guard = _build_structure_guard(edges, sky)
+
+    assert guard[8, 16] == 0.0
+    assert guard[24, 16] == 1.0

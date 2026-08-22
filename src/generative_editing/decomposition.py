@@ -46,15 +46,37 @@ class SceneDecomposition:
             raise ValueError("Decomposition masks must be in the [0, 1] range")
 
     def edit_matte(self, weather: Weather) -> np.ndarray:
-        """Build a conservative alpha matte for a requested weather edit."""
+        """Build a soft support map for target-specific weather appearance."""
         weights = {
-            Weather.CLEAR: (1.00, 0.20, 0.25, 0.75),
-            Weather.OVERCAST: (1.00, 0.25, 0.30, 0.75),
-            Weather.RAIN: (0.90, 0.55, 0.45, 0.80),
-            Weather.SNOW: (0.90, 0.75, 0.40, 0.65),
-            Weather.FOG: (0.55, 0.15, 1.00, 0.20),
+            Weather.CLEAR: (1.00, 0.20, 0.25, 0.15),
+            Weather.OVERCAST: (1.00, 0.30, 0.35, 0.30),
+            Weather.RAIN: (0.90, 0.65, 0.50, 0.30),
+            Weather.SNOW: (0.95, 0.85, 0.55, 0.55),
+            Weather.FOG: (0.60, 0.20, 1.00, 0.20),
         }
-        sky_weight, surface_weight, atmosphere_weight, guard_weight = weights[weather]
+        sky_weight, surface_weight, atmosphere_weight, global_weight = weights[weather]
+        semantic_support = np.maximum.reduce(
+            (
+                sky_weight * self.sky,
+                surface_weight * self.weather_surface,
+                atmosphere_weight * self.atmosphere,
+            )
+        )
+        semantic_support *= 0.25 + 0.75 * self.confidence
+        matte = global_weight + (1.0 - global_weight) * semantic_support
+        matte = cv2.GaussianBlur(matte.astype(np.float32), (0, 0), sigmaX=1.2)
+        return np.clip(matte, 0.0, 1.0)
+
+    def generation_matte(self, weather: Weather) -> np.ndarray:
+        """Limit generated spatial content to physically receptive regions."""
+        weights = {
+            Weather.CLEAR: (1.00, 0.10, 0.05),
+            Weather.OVERCAST: (1.00, 0.15, 0.10),
+            Weather.RAIN: (0.90, 0.75, 0.30),
+            Weather.SNOW: (0.95, 0.90, 0.15),
+            Weather.FOG: (0.60, 0.15, 1.00),
+        }
+        sky_weight, surface_weight, atmosphere_weight = weights[weather]
         matte = np.maximum.reduce(
             (
                 sky_weight * self.sky,
@@ -63,9 +85,7 @@ class SceneDecomposition:
             )
         )
         matte *= 0.25 + 0.75 * self.confidence
-        matte *= 1.0 - guard_weight * self.structure_guard
-        matte = cv2.GaussianBlur(matte.astype(np.float32), (0, 0), sigmaX=1.2)
-        return np.clip(matte, 0.0, 1.0)
+        return np.clip(cv2.GaussianBlur(matte.astype(np.float32), (0, 0), sigmaX=1.2), 0.0, 1.0)
 
 
 class SceneDecomposer(Protocol):
@@ -102,7 +122,7 @@ class HeuristicSceneDecomposer:
 
         atmosphere = np.broadcast_to((1.0 - vertical) ** 1.5, (height, width)).copy()
         surface = np.broadcast_to(np.clip((vertical - 0.42) / 0.58, 0.0, 1.0), (height, width)).copy()
-        structure = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1).astype(np.float32) / 255.0
+        structure = _build_structure_guard(edges, sky)
         confidence = np.full((height, width), base_confidence, dtype=np.float32)
         confidence = np.maximum(confidence, 0.70 * sky)
 
@@ -168,11 +188,16 @@ class TransformerSceneDecomposer:
             "land",
             "path",
             "road",
+            "rock",
+            "roof",
             "runway",
             "sand",
             "sidewalk",
+            "stone",
         }
         weather_surface = np.isin(labels_np, _label_ids(id2label, surface_names)).astype(np.float32)
+        water_names = {"lake", "river", "sea", "swimming pool", "water", "waterfall"}
+        water = np.isin(labels_np, _label_ids(id2label, water_names)).astype(np.float32)
         protected_names = {
             "airplane",
             "bicycle",
@@ -195,10 +220,8 @@ class TransformerSceneDecomposer:
         atmosphere = cv2.GaussianBlur(far_likelihood, (0, 0), sigmaX=2.0)
         rgb = np.asarray(rgb_image, dtype=np.uint8)
         edges = cv2.Canny(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), 70, 160)
-        structure = np.maximum(
-            cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1) / 255.0,
-            protected,
-        ).astype(np.float32)
+        transient_texture = np.maximum(sky, water)
+        structure = _build_structure_guard(edges, transient_texture, protected)
 
         return SceneDecomposition(
             sky=cv2.GaussianBlur(sky, (0, 0), sigmaX=1.0),
@@ -221,6 +244,24 @@ def _top_connected(mask: np.ndarray) -> np.ndarray:
 def _label_ids(id2label: dict[int, str], names: set[str]) -> list[int]:
     normalized = {name.casefold() for name in names}
     return [int(label_id) for label_id, label in id2label.items() if label.casefold() in normalized]
+
+
+def _build_structure_guard(
+    edges: np.ndarray,
+    transient_texture: np.ndarray,
+    protected: np.ndarray | None = None,
+) -> np.ndarray:
+    transient_interior = cv2.erode(
+        (transient_texture > 0.5).astype(np.uint8),
+        np.ones((5, 5), np.uint8),
+        iterations=1,
+    )
+    static_edges = edges.copy()
+    static_edges[transient_interior > 0] = 0
+    guard = cv2.dilate(static_edges, np.ones((3, 3), np.uint8), iterations=1).astype(np.float32) / 255.0
+    if protected is not None:
+        guard = np.maximum(guard, protected)
+    return guard.astype(np.float32)
 
 
 def _far_likelihood(depth: np.ndarray, sky: np.ndarray) -> np.ndarray:

@@ -18,6 +18,7 @@ class PipelineResult:
     image: Image.Image
     decomposition: SceneDecomposition
     matte: np.ndarray
+    generation_matte: np.ndarray
     metrics: EditMetrics
 
     def save_debug_masks(self, directory: Path) -> None:
@@ -29,6 +30,7 @@ class PipelineResult:
             "structure_guard": self.decomposition.structure_guard,
             "confidence": self.decomposition.confidence,
             "edit_matte": self.matte,
+            "generation_matte": self.generation_matte,
         }
         for name, mask in masks.items():
             Image.fromarray((np.clip(mask, 0.0, 1.0) * 255).astype(np.uint8)).save(directory / f"{name}.png")
@@ -44,6 +46,14 @@ class WeatherEditingPipeline:
         decomposition = self.decomposer.decompose(source)
         candidate = self.editor.edit(source, weather, seed)
         matte = decomposition.edit_matte(weather)
-        output = selective_composite(source, candidate, matte)
-        metrics = evaluate_edit(source, output, matte)
-        return PipelineResult(output, decomposition, matte, metrics)
+        generation_matte = decomposition.generation_matte(weather)
+        output = selective_composite(
+            source,
+            candidate,
+            matte,
+            decomposition.structure_guard,
+            generation_matte,
+            detail_strength=0.20 if weather is Weather.FOG else 1.0,
+        )
+        metrics = evaluate_edit(source, output, generation_matte, decomposition.structure_guard)
+        return PipelineResult(output, decomposition, matte, generation_matte, metrics)

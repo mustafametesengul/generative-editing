@@ -1,6 +1,6 @@
 {
-  "inside_edit_mae": 0.11352687329053879,
-  "outside_edge_f1": 0.9583880515102216,
-  "outside_mae": 0.06833480298519135,
-  "outside_psnr": 20.236796234987445
+  "global_edit_mae": 0.11433872580528259,
+  "semantic_support_mae": 0.13006897270679474,
+  "structure_edge_f1": 0.6381759271536415,
+  "weak_support_mae": 0.06890665739774704
 }

@@ -5,12 +5,12 @@
     "result": "urban_rain.png",
     "target": "rain",
     "seed": 11,
-    "observation": "Convincing cloud and rain replacement; minaret and ruin geometry remain aligned.",
+    "observation": "Clouds and rain enter mainly through sky/atmosphere; ruins receive coherent darker illumination while static edges remain stable.",
     "metrics": {
-      "outside_mae": 0.019272951409220695,
-      "outside_psnr": 26.3343615250815,
-      "inside_edit_mae": 0.1428299993276596,
-      "outside_edge_f1": 0.9499327782841848
+      "global_edit_mae": 0.06646309792995453,
+      "semantic_support_mae": 0.1332734227180481,
+      "structure_edge_f1": 0.985639145806659,
+      "weak_support_mae": 0.02515471912920475
     }
   },
   {
@@ -19,12 +19,12 @@
     "result": "mountain_fog.png",
     "target": "fog",
     "seed": 23,
-    "observation": "Depth-aware distant attenuation is visible; residual bright cloud contours remain a refinement target.",
+    "observation": "Fog attenuates distant terrain through the depth-conditioned generation matte while foreground geometry is retained.",
     "metrics": {
-      "outside_mae": 0.06833480298519135,
-      "outside_psnr": 20.236796234987445,
-      "inside_edit_mae": 0.11352687329053879,
-      "outside_edge_f1": 0.9583880515102216
+      "global_edit_mae": 0.11433872580528259,
+      "semantic_support_mae": 0.13006897270679474,
+      "structure_edge_f1": 0.6381759271536415,
+      "weak_support_mae": 0.06890665739774704
     }
   },
   {
@@ -33,12 +33,12 @@
     "result": "coastal_snow.png",
     "target": "snow",
     "seed": 37,
-    "observation": "Lighthouse is preserved, but surface snow is weak and bird-like sky artifacts violate object-count invariance.",
+    "observation": "Snow affects global illumination and receptive surfaces; the sea stays liquid and invented foreground geometry is rejected.",
     "metrics": {
-      "outside_mae": 0.04423092305660248,
-      "outside_psnr": 22.727156517536876,
-      "inside_edit_mae": 0.17762582004070282,
-      "outside_edge_f1": 0.9195499893865422
+      "global_edit_mae": 0.1685638576745987,
+      "semantic_support_mae": 0.20794105529785156,
+      "structure_edge_f1": 0.9365060253193224,
+      "weak_support_mae": 0.13055051863193512
     }
   }
 ]

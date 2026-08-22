@@ -2,21 +2,25 @@
 
 All edits use transformer decomposition, `black-forest-labs/FLUX.2-klein-4B`, four inference steps, and an NVIDIA L4.
 
-![Source, result, and matte comparison](contact_sheet.jpg)
+The appearance matte controls geometry-preserving color and illumination transfer. The generation matte controls where raw generated spatial content may enter.
+
+![Source, result, appearance matte, and generation matte](contact_sheet.jpg)
 
 ## Results
 
-| Case | Target | Seed | Inside MAE | Outside MAE | Outside PSNR | Edge F1 |
+| Case | Target | Seed | Global MAE | Strong-support MAE | Weak-support MAE | Structure edge F1 |
 |---|---:|---:|---:|---:|---:|---:|
-| [urban_rain](results/urban_rain.png) | rain | 11 | 0.143 | 0.019 | 26.33 dB | 0.950 |
-| [mountain_fog](results/mountain_fog.png) | fog | 23 | 0.114 | 0.068 | 20.24 dB | 0.958 |
-| [coastal_snow](results/coastal_snow.png) | snow | 37 | 0.178 | 0.044 | 22.73 dB | 0.920 |
+| [urban_rain](results/urban_rain.png) | rain | 11 | 0.066 | 0.133 | 0.025 | 0.986 |
+| [mountain_fog](results/mountain_fog.png) | fog | 23 | 0.114 | 0.130 | 0.069 | 0.638 |
+| [coastal_snow](results/coastal_snow.png) | snow | 37 | 0.169 | 0.208 | 0.131 | 0.937 |
+
+Fog intentionally attenuates edge contrast, so structure-edge thresholds are calibrated per target rather than compared directly across weather types.
 
 ## Observations
 
-- **urban_rain**: Convincing cloud and rain replacement; minaret and ruin geometry remain aligned.
-- **mountain_fog**: Depth-aware distant attenuation is visible; residual bright cloud contours remain a refinement target.
-- **coastal_snow**: Lighthouse is preserved, but surface snow is weak and bird-like sky artifacts violate object-count invariance.
+- **urban_rain**: Clouds and rain enter mainly through sky/atmosphere; ruins receive coherent darker illumination while static edges remain stable.
+- **mountain_fog**: Fog attenuates distant terrain through the depth-conditioned generation matte while foreground geometry is retained.
+- **coastal_snow**: Snow affects global illumination and receptive surfaces; the sea stays liquid and invented foreground geometry is rejected.
 
 ## Source attribution
 
