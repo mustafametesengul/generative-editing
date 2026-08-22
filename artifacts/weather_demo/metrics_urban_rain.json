@@ -1,6 +1,6 @@
 {
-  "global_edit_mae": 0.06646309792995453,
-  "semantic_support_mae": 0.1332734227180481,
-  "structure_edge_f1": 0.985639145806659,
-  "weak_support_mae": 0.02515471912920475
+  "global_edit_mae": 0.10589982569217682,
+  "semantic_support_mae": 0.1430995911359787,
+  "structure_edge_f1": 0.8996199874882859,
+  "weak_support_mae": 0.08289946615695953
 }

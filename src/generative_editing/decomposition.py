@@ -11,6 +11,24 @@ import numpy as np
 from PIL import Image
 
 
+WEATHER_SURFACE_NAMES = {
+    "earth",
+    "field",
+    "grass",
+    "hill",
+    "land",
+    "mountain",
+    "path",
+    "road",
+    "rock",
+    "roof",
+    "runway",
+    "sand",
+    "sidewalk",
+    "stone",
+}
+
+
 class Weather(StrEnum):
     CLEAR = "clear"
     OVERCAST = "overcast"
@@ -49,8 +67,8 @@ class SceneDecomposition:
         """Build a soft support map for target-specific weather appearance."""
         weights = {
             Weather.CLEAR: (1.00, 0.20, 0.25, 0.15),
-            Weather.OVERCAST: (1.00, 0.30, 0.35, 0.30),
-            Weather.RAIN: (0.90, 0.65, 0.50, 0.30),
+            Weather.OVERCAST: (1.00, 0.30, 0.35, 0.65),
+            Weather.RAIN: (0.90, 0.65, 0.50, 0.75),
             Weather.SNOW: (0.95, 0.85, 0.55, 0.55),
             Weather.FOG: (0.60, 0.20, 1.00, 0.20),
         }
@@ -181,21 +199,7 @@ class TransformerSceneDecomposer:
         id2label = self.segmentation_model.config.id2label
 
         sky = np.isin(labels_np, _label_ids(id2label, {"sky"})).astype(np.float32)
-        surface_names = {
-            "earth",
-            "field",
-            "grass",
-            "land",
-            "path",
-            "road",
-            "rock",
-            "roof",
-            "runway",
-            "sand",
-            "sidewalk",
-            "stone",
-        }
-        weather_surface = np.isin(labels_np, _label_ids(id2label, surface_names)).astype(np.float32)
+        weather_surface = np.isin(labels_np, _label_ids(id2label, WEATHER_SURFACE_NAMES)).astype(np.float32)
         water_names = {"lake", "river", "sea", "swimming pool", "water", "waterfall"}
         water = np.isin(labels_np, _label_ids(id2label, water_names)).astype(np.float32)
         protected_names = {

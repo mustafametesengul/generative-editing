@@ -54,6 +54,7 @@ class WeatherEditingPipeline:
             decomposition.structure_guard,
             generation_matte,
             detail_strength=0.20 if weather is Weather.FOG else 1.0,
+            weather=weather,
         )
         metrics = evaluate_edit(source, output, generation_matte, decomposition.structure_guard)
         return PipelineResult(output, decomposition, matte, generation_matte, metrics)

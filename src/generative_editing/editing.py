@@ -94,6 +94,7 @@ def selective_composite(
     structure_guard: np.ndarray | None = None,
     generation_matte: np.ndarray | None = None,
     detail_strength: float = 1.0,
+    weather: Weather | None = None,
 ) -> Image.Image:
     """Transfer weather globally while limiting generated spatial content."""
     source = np.asarray(original.convert("RGB"), dtype=np.float32)
@@ -108,7 +109,7 @@ def selective_composite(
             raise ValueError("Generation matte dimensions must match the source image")
         generation_alpha = np.clip(generation_matte, 0.0, 1.0)[..., None].astype(np.float32)
 
-    relit_source = _color_transfer(source, edited)
+    relit_source = _weather_tone(_color_transfer(source, edited), weather)
     photometric_base = source * (1.0 - appearance_alpha) + relit_source * appearance_alpha
     composite = photometric_base + generation_alpha * (edited - relit_source)
 
@@ -135,6 +136,29 @@ def _color_transfer(source: np.ndarray, reference: np.ndarray) -> np.ndarray:
     scale = np.clip(reference_std / np.maximum(source_std, 1e-6), 0.70, 1.30)
     shift = np.clip(reference_mean - source_mean, -48.0, 48.0)
     return (source - source_mean) * scale + source_mean + shift
+
+
+def _weather_tone(image: np.ndarray, weather: Weather | None) -> np.ndarray:
+    if weather not in {Weather.OVERCAST, Weather.RAIN, Weather.SNOW}:
+        return image
+
+    rgb = np.clip(image / 255.0, 0.0, 1.0)
+    luminance = np.sum(rgb * np.array([0.2126, 0.7152, 0.0722], dtype=np.float32), axis=2, keepdims=True)
+    saturation = 0.72 if weather is Weather.RAIN else 0.82
+    rgb = luminance + saturation * (rgb - luminance)
+
+    if weather is Weather.RAIN:
+        diffuse_luminance = 0.52 * np.sqrt(np.clip(luminance, 0.0, 1.0))
+        rgb *= diffuse_luminance / np.maximum(luminance, 1e-4)
+        rgb *= np.array([0.92, 0.97, 1.03], dtype=np.float32)
+    elif weather is Weather.OVERCAST:
+        diffuse_luminance = 0.60 * np.sqrt(np.clip(luminance, 0.0, 1.0))
+        rgb *= diffuse_luminance / np.maximum(luminance, 1e-4)
+        rgb *= np.array([0.96, 0.99, 1.02], dtype=np.float32)
+    else:
+        rgb = np.clip(rgb * np.array([0.96, 0.99, 1.04], dtype=np.float32) + 0.04, 0.0, 1.0)
+
+    return rgb * 255.0
 
 
 def weather_prompt(weather: Weather) -> str:

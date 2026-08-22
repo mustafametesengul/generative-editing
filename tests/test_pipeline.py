@@ -95,3 +95,33 @@ def test_fog_attenuates_more_source_detail_than_snow() -> None:
     snow_contrast = snow_like[:, 31:33].mean() - snow_like[:, 25:27].mean()
     fog_contrast = fog_like[:, 31:33].mean() - fog_like[:, 25:27].mean()
     assert fog_contrast < snow_contrast
+
+
+def test_rain_removes_warm_direct_sun_appearance_globally() -> None:
+    source_array = np.empty((64, 64, 3), dtype=np.uint8)
+    source_array[:, :32] = (210, 160, 90)
+    source_array[:, 32:] = (105, 80, 45)
+    candidate_array = np.empty((64, 64, 3), dtype=np.uint8)
+    candidate_array[:, :32] = (150, 160, 170)
+    candidate_array[:, 32:] = (75, 80, 85)
+    appearance_matte = np.full((64, 64), 0.75, dtype=np.float32)
+    generation_matte = np.zeros((64, 64), dtype=np.float32)
+
+    result = np.asarray(
+        selective_composite(
+            Image.fromarray(source_array),
+            Image.fromarray(candidate_array),
+            appearance_matte,
+            generation_matte=generation_matte,
+            weather=Weather.RAIN,
+        ),
+        dtype=np.float32,
+    )
+
+    source_luminance = source_array.mean(axis=2)
+    result_luminance = result.mean(axis=2)
+    source_ratio = source_luminance[:, :32].mean() / source_luminance[:, 32:].mean()
+    result_ratio = result_luminance[:, :32].mean() / result_luminance[:, 32:].mean()
+    assert result.mean() < source_array.mean() - 15.0
+    assert result_ratio < source_ratio - 0.35
+    assert (result[..., 0] - result[..., 2]).mean() < 60.0

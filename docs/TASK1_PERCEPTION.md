@@ -41,7 +41,7 @@ The production profile runs segmentation and depth in parallel, exports them to 
 The ontology maps semantic logits into causal weather layers:
 
 - `sky`: sky posterior, boundary-refined and restricted to top-connected components unless an indoor/open-roof case is detected.
-- `weather_surface`: ground classes that can become wet or accumulate snow. A learned material head eventually replaces the class list.
+- `weather_surface`: ground and exposed terrain classes that can become wet or accumulate snow, including mountain, hill, rock, roof, earth, road, and vegetation. A learned material/orientation head eventually replaces this ADE-derived class list.
 - `atmosphere`: relative far-depth likelihood, regularized by sky and horizon. This controls fog and distant contrast.
 - `structure_guard`: static Canny/learned boundaries plus person, vehicle, text, sign, and logo instances. Edges inside sky and water are excluded as transient texture; their boundaries remain guarded. OCR polygons and face/plate detections are hard guards in production.
 - `confidence`: calibrated segmentation confidence multiplied by in-distribution and image-quality scores.

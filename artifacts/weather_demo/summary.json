@@ -5,12 +5,12 @@
     "result": "urban_rain.png",
     "target": "rain",
     "seed": 11,
-    "observation": "Clouds and rain enter mainly through sky/atmosphere; ruins receive coherent darker illumination while static edges remain stable.",
+    "observation": "Rain changes sky and surfaces; diffuse tone mapping reduces the measured facade sun/shadow ratio from 1.338 to 1.202 while retaining masonry detail.",
     "metrics": {
-      "global_edit_mae": 0.06646309792995453,
-      "semantic_support_mae": 0.1332734227180481,
-      "structure_edge_f1": 0.985639145806659,
-      "weak_support_mae": 0.02515471912920475
+      "global_edit_mae": 0.10589982569217682,
+      "semantic_support_mae": 0.1430995911359787,
+      "structure_edge_f1": 0.8996199874882859,
+      "weak_support_mae": 0.08289946615695953
     }
   },
   {
@@ -33,12 +33,12 @@
     "result": "coastal_snow.png",
     "target": "snow",
     "seed": 37,
-    "observation": "Snow affects global illumination and receptive surfaces; the sea stays liquid and invented foreground geometry is rejected.",
+    "observation": "Mountain-labeled islands and lighthouse-base rock receive accumulation; the sea remains liquid and invented foreground geometry is rejected.",
     "metrics": {
-      "global_edit_mae": 0.1685638576745987,
-      "semantic_support_mae": 0.20794105529785156,
-      "structure_edge_f1": 0.9365060253193224,
-      "weak_support_mae": 0.13055051863193512
+      "global_edit_mae": 0.18639490008354187,
+      "semantic_support_mae": 0.22016066312789917,
+      "structure_edge_f1": 0.9146859650991106,
+      "weak_support_mae": 0.15142862498760223
     }
   }
 ]
