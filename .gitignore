@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Confidential source material
+Syntonym_CV_GenAI_Task.pdf
