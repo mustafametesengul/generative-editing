@@ -1,18 +1,16 @@
 """Lightweight preservation and edit-strength metrics for pipeline checks."""
 
-from __future__ import annotations
-
-from dataclasses import asdict, dataclass
-
 import cv2
 import numpy as np
 from PIL import Image
+from pydantic import BaseModel, ConfigDict
 
 from generative_editing.decomposition import SceneLayout
 
 
-@dataclass(frozen=True)
-class EditMetrics:
+class EditMetrics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     global_edit_mae: float
     semantic_support_mae: float
     weak_support_mae: float
@@ -20,9 +18,6 @@ class EditMetrics:
     protected_gain: float
     water_loss: float
     water_gain: float
-
-    def as_dict(self) -> dict[str, float]:
-        return asdict(self)
 
 
 def evaluate_edit(

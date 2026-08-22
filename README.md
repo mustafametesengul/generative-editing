@@ -2,7 +2,13 @@
 
 Technical assessment submission for structured attribute detection and controllable generative editing. Domain: **weather transformation in outdoor photographs** — change sky, visibility, precipitation, and surface response while preserving camera, geometry, identities, text, and scene layout.
 
-The pipeline is **generate → verify → select**: FLUX.2 Klein edits the full frame for several seeds, the Task 1 decomposition scores each candidate and hard-gates semantic drift (added people, altered land-water boundaries), and the best passing candidate is returned untouched. Masks verify; they never blend pixels.
+The pipeline is **generate → verify → select**: FLUX.2 Klein edits the full frame for several seeds, the Task 1 decomposition scores each candidate and hard-gates semantic drift (added people, altered land-water boundaries), and the best passing candidate is returned.
+
+| Before | After (snow) |
+|---|---|
+| ![Coastal source photograph](artifacts/weather_demo/sources/coastal.jpg) | ![Snow edit: accumulation on land and roofs while the sea stays liquid](artifacts/weather_demo/results/coastal_snow.png) |
+
+More examples, masks, and metrics: [demo README](artifacts/weather_demo/README.md).
 
 ## Deliverables
 

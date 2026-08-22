@@ -1,7 +1,5 @@
 """Check whether PyTorch can execute work on the available CUDA GPU."""
 
-from __future__ import annotations
-
 import sys
 
 import torch

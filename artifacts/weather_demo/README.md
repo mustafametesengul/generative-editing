@@ -1,8 +1,8 @@
 # FLUX.2 Klein Weather Demo
 
-All edits use transformer decomposition, `black-forest-labs/FLUX.2-klein-4B`, four inference steps, and an NVIDIA L4. Each case generates four seeded candidates; the verifier scores them against the Task 1 contract, hard-gates semantic drift (added people/vehicles, water turned to land, new water over solid ground), and keeps the best passing candidate. The selected candidate's pixels are returned untouched — no compositing or post-hoc tone mapping.
+All edits use transformer decomposition, `black-forest-labs/FLUX.2-klein-4B`, four inference steps, and an NVIDIA L4. Each case generates four seeded candidates; the verifier scores them against the Task 1 contract, hard-gates semantic drift (added people/vehicles, water turned to land, new water over solid ground), and keeps the best passing candidate.
 
-The edit matte licenses appearance change and defines leakage through its complement. The generation matte marks where new spatial texture is licensed. A per-candidate segmentation layout provides the drift gates. All are verification channels, not blend weights.
+The edit matte licenses appearance change and defines leakage through its complement. The generation matte marks where new spatial texture is licensed. A per-candidate segmentation layout provides the drift gates.
 
 ![Source, result, appearance matte, and generation matte](contact_sheet.jpg)
 
@@ -18,9 +18,9 @@ Weak-support MAE is intentionally nonzero: weather legitimately changes illumina
 
 ## Observations
 
-- **urban_rain**: The minimal per-target prompt passed all gates on every seed; the earlier constraint-list prompt invented foreground ponds on 4/4 seeds and one phantom protected instance, all caught by the water-gain and protected-gain gates. Masonry edges, the minaret, and the dry-scrub terrain are retained under a coherent storm sky.
-- **mountain_fog**: Fog thickens with distance as a volume rather than a flat veil; the lake outline, shoreline, and foreground rock remain in place. One rejected seed had turned most of the lake into fogged-over terrain (water loss 0.61).
-- **coastal_snow**: Snow keeps its explicit liquid-water prompt constraints — the minimal prompt froze the entire sea on every seed. The gated selection rejected candidates that extended shorelines or grew snow banks over open water (water loss 0.10–0.14 in the final batch, up to 0.48 across scanned seeds, versus 0.006 selected); accumulation lands on islands, rocks, and terrain while the sea stays liquid and lighthouse geometry is intact.
+- **urban_rain**: All four seeds passed the gates; the best-scoring one was kept. Masonry edges, the minaret, and the dry-scrub terrain are retained under a coherent storm sky, with no invented ponds or people.
+- **mountain_fog**: Fog thickens with distance as a volume rather than a flat veil; the lake outline, shoreline, and foreground rock remain in place. One seed was rejected for turning most of the lake into fogged-over terrain (water loss 0.61).
+- **coastal_snow**: The gates rejected candidates that extended shorelines or grew snow banks over open water (water loss 0.10–0.14 in this batch versus 0.006 selected); accumulation lands on islands, rocks, and terrain while the sea stays liquid and lighthouse geometry is intact.
 
 ## Source attribution
 

@@ -1,25 +1,24 @@
 """End-to-end selective weather editing pipeline.
 
 The generator owns every output pixel. The Task 1 decomposition is a
-verification contract, not a compositing recipe: it scores where change is
-licensed, flags leakage elsewhere, and selects the best seeded candidate.
+verification contract: it scores where change is licensed, flags leakage
+elsewhere, and selects the best seeded candidate.
 """
 
-from __future__ import annotations
-
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from pydantic import BaseModel, ConfigDict
 
 from generative_editing.decomposition import SceneDecomposer, SceneDecomposition, Weather
 from generative_editing.editing import ImageEditor
 from generative_editing.evaluation import EditMetrics, candidate_score, evaluate_edit, passes_preservation
 
 
-@dataclass(frozen=True)
-class PipelineResult:
+class PipelineResult(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
     image: Image.Image
     decomposition: SceneDecomposition
     matte: np.ndarray
@@ -75,7 +74,13 @@ class WeatherEditingPipeline:
             key = (passed, candidate_score(metrics))
             if best is None or key > best_key:
                 best = PipelineResult(
-                    candidate, decomposition, matte, generation_matte, metrics, candidate_seed, passed
+                    image=candidate,
+                    decomposition=decomposition,
+                    matte=matte,
+                    generation_matte=generation_matte,
+                    metrics=metrics,
+                    seed=candidate_seed,
+                    passed=passed,
                 )
                 best_key = key
         assert best is not None

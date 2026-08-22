@@ -1,14 +1,12 @@
 """Weather-aware scene decomposition for selective image editing."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, Self
 
 import cv2
 import numpy as np
 from PIL import Image
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 WEATHER_SURFACE_NAMES = {
@@ -56,9 +54,10 @@ class Weather(StrEnum):
     FOG = "fog"
 
 
-@dataclass(frozen=True)
-class SceneDecomposition:
+class SceneDecomposition(BaseModel):
     """Soft masks describing editable weather layers and guarded structure."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     sky: np.ndarray
     atmosphere: np.ndarray
@@ -66,7 +65,8 @@ class SceneDecomposition:
     structure_guard: np.ndarray
     confidence: np.ndarray
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def _check_masks(self) -> Self:
         shape = self.sky.shape
         arrays = (
             self.sky,
@@ -81,6 +81,7 @@ class SceneDecomposition:
             raise ValueError("Decomposition masks must contain finite values")
         if any(array.min() < 0.0 or array.max() > 1.0 for array in arrays):
             raise ValueError("Decomposition masks must be in the [0, 1] range")
+        return self
 
     def edit_matte(self, weather: Weather) -> np.ndarray:
         """Build a soft support map for target-specific weather appearance."""
@@ -125,19 +126,20 @@ class SceneDecomposition:
         return np.clip(cv2.GaussianBlur(matte.astype(np.float32), (0, 0), sigmaX=1.2), 0.0, 1.0)
 
 
-class SceneDecomposer(Protocol):
-    def decompose(self, image: Image.Image) -> SceneDecomposition: ...
-
-    def layout(self, image: Image.Image) -> SceneLayout: ...
-
-
-@dataclass(frozen=True)
-class SceneLayout:
+class SceneLayout(BaseModel):
     """Boolean semantic layout used to verify candidates against the source."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     protected: np.ndarray
     water: np.ndarray
     sky: np.ndarray
+
+
+class SceneDecomposer(Protocol):
+    def decompose(self, image: Image.Image) -> SceneDecomposition: ...
+
+    def layout(self, image: Image.Image) -> SceneLayout: ...
 
 
 class HeuristicSceneDecomposer:

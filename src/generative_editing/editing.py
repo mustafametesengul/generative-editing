@@ -1,7 +1,5 @@
 """Image editors for weather transformations."""
 
-from __future__ import annotations
-
 from typing import Protocol
 
 import cv2

@@ -32,9 +32,7 @@ Rectified flow is a transformer-based family allowed by the brief; its straighte
 
 1. **Generate** K full-frame candidates (demo: 4 seeds). No masks are given to the model.
 2. **Verify** each candidate against the Task 1 contract: edit strength inside the edit matte, leakage in its complement, edge F1 near the structure guard — plus hard *layout-drift gates* from re-segmenting the candidate: appeared people/vehicles, water turned solid, new water over solid ground. The semantic gates exist because MAE and edge metrics cannot tell "snow on water" from "new land".
-3. **Select** the best passing candidate and return it untouched. Preservation is enforced by rejection, never by repainting.
-
-An earlier iteration instead composited candidate pixels onto the source through the mattes (color transfer, tone curves, detail reinjection). It scored well numerically but produced halos and tone breaks — a "Photoshopped" look — because hand-tuned photometry fought the globally coherent illumination the editor had already synthesized. Inverting the mattes from blend weights into a verification contract removed the artifacts without losing control.
+3. **Select** the best passing candidate and return it; if none passes, retry new seeds or reject.
 
 **Prompt policy.** The instruction is per-target and tuned on the verifier. A/B runs showed the minimal prompt ("Keep everything the same, except that the weather is rainy.") preserves layout strictly better than a constraint list for rain and fog — the list's wetness clauses primed the model to invent ponds (4/4 seeds failed). Snow is the exception: the minimal prompt froze open sea on every seed (water-loss 0.87–1.0), so snow keeps explicit liquid-water constraints (best 0.006). Lesson: negative instructions can induce the content they forbid, so each clause must earn its place empirically.
 
