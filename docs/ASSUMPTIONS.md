@@ -2,7 +2,7 @@
 
 ## Domain choice
 
-The domain is **single outdoor photos with the weather changed** — clear, overcast, rain, snow, or fog. Weather is a good testbed because it is neither one object nor a global style: it touches the sky, visibility over distance, lighting, falling particles, and how surfaces look (wet roads, snow cover). The system has to change all of that without moving an edge, changing a face, breaking text, or inventing an object — which surfaces preservation failures much better than a simple recoloring task.
+The domain is **single outdoor photos with the weather changed**: clear, overcast, rain, snow, or fog. Weather is a good testbed because it is neither one object nor a global style. It touches the sky, visibility over distance, lighting, falling particles, and how surfaces look (wet roads, snow cover). The system has to change all of that without moving an edge, changing a face, breaking text, or inventing an object. This makes preservation failures much easier to spot than they would be in a simple recoloring task.
 
 The design carries over to other domains by swapping what counts as editable and how it is checked; the perception contract, editor, verifier, and gates stay the same.
 
@@ -20,7 +20,7 @@ The design carries over to other domains by swapping what counts as editable and
 1. Inputs are licensed or user-owned photos. They may incidentally contain people or license plates, so everything is treated as sensitive.
 2. The main path handles one image up to about one megapixel. Bursts and video use the consistency extension in Task 2.
 3. The request is one of five fixed weather targets, not free editing text. An intensity slider is future work.
-4. There is no single correct output. Evaluation asks: did the weather change, did everything else stay, does it look real — plus human side-by-side judgments.
+4. There is no single correct output. Evaluation asks three questions: Did the weather change? Did everything else stay the same? Does it look real? Human reviewers also compare outputs side by side.
 5. When in doubt, preserve. Snow hidden behind a readable sign beats plausible snow that breaks the sign.
 6. Outputs are visualizations, not records of real conditions. Production outputs carry provenance metadata and a visible disclosure where needed.
 7. Inference runs locally in a trusted environment; raw inputs never go to a third-party API.

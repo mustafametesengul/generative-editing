@@ -1,6 +1,6 @@
 # Selective Weather Editing
 
-Technical assessment submission for structured attribute detection and controllable generative editing. Domain: **weather transformation in outdoor photographs** — change sky, visibility, precipitation, and surface response while preserving camera, geometry, identities, text, and scene layout.
+Technical assessment submission for structured attribute detection and controllable generative editing. The domain is **weather transformation in outdoor photographs**: changing sky, visibility, precipitation, and surface response while preserving camera, geometry, identities, text, and scene layout.
 
 The pipeline is **generate → verify → select**: FLUX.2 Klein edits the full frame for several seeds, the Task 1 decomposition scores each candidate and hard-gates semantic drift (added people, altered land-water boundaries), and the best passing candidate is returned.
 

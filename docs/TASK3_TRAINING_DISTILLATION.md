@@ -10,7 +10,7 @@ Rank-32 LoRA on the transformer's attention/MLP layers; the VAE and text encoder
 
 ## Distillation
 
-The fine-tuned four-step model becomes the teacher for a two-step student (same 4B size first, a smaller 2B later) trained with consistency distillation. Keep the preservation losses during distillation — otherwise the student gets fast by ignoring the source. Then INT8/FP8 quantization where the L4 supports it (VAE-sensitive layers stay FP16/BF16) and a TensorRT build. Quantization is judged on task metrics, not reconstruction error.
+The fine-tuned four-step model becomes the teacher for a two-step student (same 4B size first, a smaller 2B later) trained with consistency distillation. Keep the preservation losses during distillation. Without them, the student can get faster by ignoring the source. Then use INT8/FP8 quantization where the L4 supports it (VAE-sensitive layers stay FP16/BF16), followed by a TensorRT build. Quantization is judged on task metrics, not reconstruction error.
 
 ## Evaluation loop
 
