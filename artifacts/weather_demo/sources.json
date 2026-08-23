@@ -1,0 +1,35 @@
+[
+  {
+    "label": "urban",
+    "file": "artifacts/weather_demo/sources/urban.jpg",
+    "title": "File:20110102 Kharanaq old city Iran.jpg",
+    "description_url": "https://commons.wikimedia.org/wiki/File:20110102_Kharanaq_old_city_Iran.jpg",
+    "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/20110102_Kharanaq_old_city_Iran.jpg/1280px-20110102_Kharanaq_old_city_Iran.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 3.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "artist": "<a href=\"//commons.wikimedia.org/wiki/User:Ggia\" title=\"User:Ggia\">User:Ggia</a>",
+    "credit": "<span class=\"int-own-work\" lang=\"en\">Own work</span>"
+  },
+  {
+    "label": "mountain",
+    "file": "artifacts/weather_demo/sources/mountain.jpg",
+    "title": "File:1 lake louise pano 2019.jpg",
+    "description_url": "https://commons.wikimedia.org/wiki/File:1_lake_louise_pano_2019.jpg",
+    "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/1_lake_louise_pano_2019.jpg/1280px-1_lake_louise_pano_2019.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "artist": "<a href=\"//commons.wikimedia.org/wiki/User:Chensiyuan\" title=\"User:Chensiyuan\">Chensiyuan</a>",
+    "credit": "<span class=\"int-own-work\" lang=\"en\">Own work</span>"
+  },
+  {
+    "label": "coastal",
+    "file": "artifacts/weather_demo/sources/coastal.jpg",
+    "title": "File:2016-11-13 01 Kjeungskj\u00e6r Lighthouse, S\u00f8r-Tr\u00f8ndelag, Norway.jpg",
+    "description_url": "https://commons.wikimedia.org/wiki/File:2016-11-13_01_Kjeungskj%C3%A6r_Lighthouse,_S%C3%B8r-Tr%C3%B8ndelag,_Norway.jpg",
+    "download_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/2016-11-13_01_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg/1280px-2016-11-13_01_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "artist": "<a href=\"//commons.wikimedia.org/wiki/User:GRDN711\" title=\"User:GRDN711\">Gordon Leggett</a>",
+    "credit": "<span class=\"int-own-work\" lang=\"en\">Own work</span>"
+  }
+]

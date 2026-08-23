@@ -1,0 +1,56 @@
+[
+  {
+    "name": "urban_rain",
+    "source": "urban.jpg",
+    "result": "urban_rain.png",
+    "target": "rain",
+    "candidates": 4,
+    "selected_seed": 14,
+    "passed_preservation": true,
+    "metrics": {
+      "global_edit_mae": 0.13380031287670135,
+      "protected_gain": 0.0,
+      "semantic_support_mae": 0.13555210828781128,
+      "structure_edge_f1": 0.8743602581343425,
+      "water_gain": 0.0,
+      "water_loss": 0.0,
+      "weak_support_mae": 0.12319429218769073
+    }
+  },
+  {
+    "name": "mountain_fog",
+    "source": "mountain.jpg",
+    "result": "mountain_fog.png",
+    "target": "fog",
+    "candidates": 4,
+    "selected_seed": 25,
+    "passed_preservation": true,
+    "metrics": {
+      "global_edit_mae": 0.14746494591236115,
+      "protected_gain": 0.0,
+      "semantic_support_mae": 0.15415866672992706,
+      "structure_edge_f1": 0.48637510411047097,
+      "water_gain": 0.01823424442896936,
+      "water_loss": 0.0,
+      "weak_support_mae": 0.12131714820861816
+    }
+  },
+  {
+    "name": "coastal_snow",
+    "source": "coastal.jpg",
+    "result": "coastal_snow.png",
+    "target": "snow",
+    "candidates": 4,
+    "selected_seed": 54,
+    "passed_preservation": true,
+    "metrics": {
+      "global_edit_mae": 0.27872246503829956,
+      "protected_gain": 0.0,
+      "semantic_support_mae": 0.275444358587265,
+      "structure_edge_f1": 0.756073230619025,
+      "water_gain": 0.0031598471223021583,
+      "water_loss": 0.0064878743591035805,
+      "weak_support_mae": 0.2931458055973053
+    }
+  }
+]

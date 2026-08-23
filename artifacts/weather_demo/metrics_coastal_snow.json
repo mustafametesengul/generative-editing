@@ -1,0 +1,11 @@
+{
+  "global_edit_mae": 0.27872246503829956,
+  "passed_preservation": true,
+  "protected_gain": 0.0,
+  "selected_seed": 54,
+  "semantic_support_mae": 0.275444358587265,
+  "structure_edge_f1": 0.756073230619025,
+  "water_gain": 0.0031598471223021583,
+  "water_loss": 0.0064878743591035805,
+  "weak_support_mae": 0.2931458055973053
+}
