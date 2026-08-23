@@ -5,7 +5,7 @@ Technical assessment submission for structured attribute detection and controlla
 The pipeline **generates, verifies, and selects** candidates. FLUX.2 Klein edits the full frame for several seeds, the Task 1 decomposition scores each candidate and hard-gates semantic drift (added people, altered land-water boundaries), and the best passing candidate is returned.
 
 | Before | After (snow) |
-|---|---|
+| --- | --- |
 | ![Coastal source photograph](artifacts/weather_demo/sources/coastal.jpg) | ![Snow edit: accumulation on land and roofs while the sea stays liquid](artifacts/weather_demo/results/coastal_snow.png) |
 
 More examples, masks, and metrics: [demo README](artifacts/weather_demo/README.md).
@@ -33,10 +33,10 @@ The default path is deterministic and exercises decomposition, editing, candidat
 
 ```bash
 uv run generative-editing input.jpg output.jpg \
-	--weather snow \
-	--editor mock \
-	--decomposer heuristic \
-	--debug-dir artifacts/masks
+ --weather snow \
+ --editor mock \
+ --decomposer heuristic \
+ --debug-dir artifacts/masks
 ```
 
 ## Run the open-weight model
@@ -45,11 +45,11 @@ On a CUDA runtime with at least 13 GiB VRAM:
 
 ```bash
 uv run generative-editing input.jpg output.jpg \
-	--weather rain \
-	--editor flux \
-	--decomposer transformers \
-	--candidates 4 \
-	--debug-dir artifacts/masks
+ --weather rain \
+ --editor flux \
+ --decomposer transformers \
+ --candidates 4 \
+ --debug-dir artifacts/masks
 ```
 
 This lazily downloads `black-forest-labs/FLUX.2-klein-4B`, SegFormer-B2, and Depth Anything V2 Small from Hugging Face. No weights are included in this repository. Add `--cpu-offload` below 13 GiB at a substantial latency cost.

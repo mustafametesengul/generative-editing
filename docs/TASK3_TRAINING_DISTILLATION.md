@@ -19,7 +19,7 @@ Every candidate build reruns the frozen suite: weather success, preservation met
 ## Budget and risk
 
 | Stage | Rough budget | Cadence |
-|---|---:|---|
+| --- | ---: | --- |
 | Data curation and probes | 2–4 GPU-weeks + labeling | Initial, then continuous |
 | LoRA pilot | 4×A100 × 24 h | Per material change |
 | Full LoRA run | 8×A100 × 48 h | Quarterly or drift-triggered |

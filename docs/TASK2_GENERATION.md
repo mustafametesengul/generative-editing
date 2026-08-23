@@ -11,7 +11,7 @@ flowchart TD
     C --> F[K candidates]
     B --> G[Verifier]
     F --> G
-    G -->|best passing| H[Output + provenance]
+    G -->|best passing| H[Output]
     G -->|all fail| I[Retry or reject]
 ```
 
@@ -20,7 +20,7 @@ flowchart TD
 ## Family comparison
 
 | Approach | Edit control | Preservation | Cost | Assessment |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Latent-diffusion inpainting | Excellent binary spatial control | Exact outside mask; seams at boundaries | Moderate, many denoising steps | Strong sky replacement baseline, weak for global illumination/fog |
 | ControlNet-style depth/edge conditioning | Explicit geometry retention | Strong structure if controls are reliable | Extra network and domain training | Add if prompt plus verification cannot preserve geometry |
 | Native rectified-flow transformer edit | Understands global instruction and image jointly | Strong semantic consistency, but can drift | Four steps for Klein | Selected candidate generator |
@@ -43,7 +43,7 @@ The CLI ships two editors behind one protocol: `Flux2KleinEditor` (real Diffuser
 Evaluate on a held-out set with real examples of all five weather types, the hard cases from Task 1, and human ratings. Report results per weather target and scene type, not just one average.
 
 | Axis | Automated measurements | Human question |
-|---|---|---|
+| --- | --- | --- |
 | Edit fidelity | Weather-classifier target margin; CLIP margin; precipitation/wet-surface probes; fog transmission vs. depth | “Is the requested weather unambiguous and coherent?” |
 | Preservation | Edge F1 near structure; segment/OCR/identity consistency; layout-drift gates | “Is this unmistakably the same scene?” |
 | Realism | KID/FID vs. real target-weather sets; artifact detector; pairwise preference | “Could this be a real photograph?” |

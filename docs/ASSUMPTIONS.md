@@ -9,7 +9,7 @@ The design carries over to other domains by swapping what counts as editable and
 ## Edit contract
 
 | Category | Attributes |
-|---|---|
+| --- | --- |
 | Editable | Sky and clouds; precipitation; fog and visibility; overall lighting and color temperature; how surfaces respond (wetness, reflections, snow cover). |
 | Hard invariant | Camera viewpoint and crop; object count, identity, pose, and position; geometry and silhouettes; faces; text, signs, logos, license plates. |
 | Soft invariant | Materials, local texture, fine edges, and scene meaning. Their brightness and color may shift with the new lighting, but their structure must not. |

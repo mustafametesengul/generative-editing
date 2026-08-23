@@ -12,24 +12,33 @@ flowchart TD
     D --> F
     E --> F
     F --> G[Edit contract]
-    G --> H{Confident?}
-    H -->|yes| I[Task 2 pipeline]
-    H -->|no| J[Safer mask]
+    G --> H[Confidence-weighted edit matte]
+    G --> I[Confidence-weighted generation matte]
+    H --> J[Task 2 verifier]
+    I --> J
 ```
 
-The edit contract contains four soft masks (`sky`, `atmosphere`, `weather_surface`, and `structure_guard`) plus per-pixel confidence. Together they say *where weather can show up* and *what must not move*. The generator never sees these masks. They are used by the verifier, which scores and rejects candidates after generation. The segmenter also produces a small `SceneLayout` (people/vehicles, water, sky) for the source and every candidate. This helps the verifier catch what pixel metrics miss, such as an added person, water turned into land, or a new pond.
+The edit contract contains four soft masks (`sky`, `atmosphere`, `weather_surface`, and `structure_guard`) plus per-pixel confidence. Together they say *where weather can show up* and *what must not move*.
+
+The **edit matte** allows changes to brightness, color, and contrast. The stricter **generation matte** allows new detail such as raindrops, clouds, or snow cover. Per-pixel confidence reduces both mattes in uncertain regions.
+
+Edges mark boundaries that should remain stable, while OCR locates signs and other text that must stay readable. Both feed the `structure_guard` used to detect unwanted changes.
+
+The generator never sees these masks. The verifier uses them to score and reject candidates after generation. It also compares a small `SceneLayout` (people/vehicles, water, sky) between the source and each candidate, catching errors such as an added person, water turned into land, or a new pond.
 
 ## Model choice and trade-offs
 
 **Baseline: SegFormer-B2 + Depth Anything V2 Small.** SegFormer's ADE20K labels already separate sky from weather-receptive surfaces (road, grass, earth, roof). B2 is the accuracy/latency sweet spot; B0 is the edge fallback, B5 the server option. Depth matters because fog should get thicker with distance, not sit on the image like a flat veil.
 
 | Option | Strength | Limitation | Decision |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | SegFormer | Efficient dense semantics; mature TensorRT path | Closed label set; thin objects imperfect | Primary runtime model |
 | Mask2Former/OneFormer | Strong boundaries, panoptic instances | Higher latency/memory | Offline teacher, hard-case fallback |
-| Promptable segmentation | Fast adaptation to new concepts | Needs prompts; no weather ontology | Annotation accelerator only |
+| SAM 3 | Strong promptable/open-vocabulary masks; adapts to new concepts | Needs prompts and rules to turn masks into scene categories; higher, less predictable runtime cost | Annotation accelerator, offline teacher, or hard-case fallback |
 | Depth Anything V2 | Cheap zero-shot relative depth | Scale/orientation ambiguous | Fuse with sky/ground priors; never metric |
 | Weather classifier | Cheap check for current weather and unusual inputs | No localization | Auxiliary confidence head |
+
+SegFormer is preferred for runtime because its one-pass semantic map maps directly into the weather ontology. SAM 3 helps with missing concepts and difficult boundaries, but requires prompts, rules for missing or overlapping masks, and separate confidence calibration, so it remains a supporting model.
 
 In production, segmentation and depth run in parallel as TensorRT FP16/INT8 engines, and decompositions are cached by content hash. Small devices use B0 at lower resolution and get more conservative masks. Latency is measured on the L4 before release, not taken from model cards.
 
@@ -67,7 +76,7 @@ Nothing is hand-labeled at runtime. The models create the whole split. Later, th
 ## Failure modes and handling
 
 | Failure | Detection | Handling |
-|---|---|---|
+| --- | --- | --- |
 | White building merges with overcast sky | Boundary disagreement; top-connectivity; depth discontinuity | Refine with panoptic fallback; erode edit mask; review if large |
 | Reflections/puddles confused with sky | Semantic class and vertical position conflict | Keep as surface response, never sky |
 | Fog hides distant objects | Low contrast; uncertain depth | Lower edit strength and preserve edges; allow lighting change but no geometry change |
