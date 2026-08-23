@@ -86,7 +86,9 @@ Thresholds are tuned by weather and scene type, then frozen before comparing mod
 
 ## Consistency across related inputs
 
-For video or bursts, carry masks and initial noise across frames with optical flow, share the weather target over a short window, and detect cuts before reusing anything. Keep rain and snow particles consistent in 3D. For multiple photos of one place, verify weather consistency across views. The prototype handles single images only.
+For video, use a **video-to-video diffusion or flow model** that edits short, overlapping windows. Condition it on the source frames, weather prompt, depth, edges, and semantic maps. Reuse overlap frames and latent state between windows, and reset at scene cuts.
+
+After camera-motion compensation, verify that protected objects, identities, text, and weather strength remain stable over time. A cheaper fallback edits keyframes and propagates them with optical flow. The prototype handles single images only.
 
 ## Scalability and operations
 
