@@ -22,7 +22,9 @@ def test_heuristic_decomposition_finds_sky_and_structure() -> None:
 
     assert decomposition.sky.shape == (120, 160)
     assert decomposition.sky[10, 10] > 0.5
-    assert decomposition.weather_surface[110, 10] > decomposition.weather_surface[20, 10]
+    assert (
+        decomposition.weather_surface[110, 10] > decomposition.weather_surface[20, 10]
+    )
     assert decomposition.structure_guard[60, 20] > 0.5
 
 

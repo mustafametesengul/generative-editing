@@ -8,7 +8,6 @@ from PIL import Image
 
 from generative_editing.decomposition import Weather
 
-
 MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
 
 
@@ -24,7 +23,9 @@ class Flux2KleinEditor:
         from diffusers import Flux2KleinPipeline
 
         if not torch.cuda.is_available():
-            raise RuntimeError("FLUX.2 inference requires a CUDA device; use --editor mock without one")
+            raise RuntimeError(
+                "FLUX.2 inference requires a CUDA device; use --editor mock without one"
+            )
         total_vram_gib = torch.cuda.get_device_properties(0).total_memory / 1024**3
         if total_vram_gib < 13.0 and not cpu_offload:
             raise RuntimeError(
@@ -33,7 +34,9 @@ class Flux2KleinEditor:
             )
 
         self._torch = torch
-        self.pipeline = Flux2KleinPipeline.from_pretrained(model_id, dtype=torch.bfloat16)
+        self.pipeline = Flux2KleinPipeline.from_pretrained(
+            model_id, dtype=torch.bfloat16
+        )
         if cpu_offload:
             self.pipeline.enable_model_cpu_offload()
         else:
@@ -66,7 +69,9 @@ class MockWeatherEditor:
             hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV).astype(np.float32)
             hsv[..., 1] *= 1.15
             hsv[..., 2] *= 1.08
-            result = cv2.cvtColor(np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2RGB)
+            result = cv2.cvtColor(
+                np.clip(hsv, 0, 255).astype(np.uint8), cv2.COLOR_HSV2RGB
+            )
         elif weather is Weather.OVERCAST:
             gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)[..., None]
             result = 0.72 * result + 0.28 * gray
@@ -105,10 +110,14 @@ def weather_prompt(weather: Weather) -> str:
         Weather.RAIN: "rainy",
         Weather.FOG: "foggy",
     }
-    return f"Keep everything the same, except that the weather is {adjectives[weather]}."
+    return (
+        f"Keep everything the same, except that the weather is {adjectives[weather]}."
+    )
 
 
-def _generation_size(width: int, height: int, max_pixels: int = 1024 * 1024) -> tuple[int, int]:
+def _generation_size(
+    width: int, height: int, max_pixels: int = 1024 * 1024
+) -> tuple[int, int]:
     scale = min(1.0, (max_pixels / (width * height)) ** 0.5)
     resized_width = max(64, round(width * scale / 16) * 16)
     resized_height = max(64, round(height * scale / 16) * 16)
@@ -123,7 +132,9 @@ def _draw_rain(image: np.ndarray, random: np.random.Generator) -> np.ndarray:
         x = int(random.integers(-10, width))
         y = int(random.integers(0, height))
         length = int(random.integers(7, 18))
-        cv2.line(overlay, (x, y), (x + 3, min(height - 1, y + length)), (190, 205, 220), 1)
+        cv2.line(
+            overlay, (x, y), (x + 3, min(height - 1, y + length)), (190, 205, 220), 1
+        )
     return cv2.addWeighted(canvas, 0.82, overlay, 0.18, 0).astype(np.float32)
 
 

@@ -1,13 +1,17 @@
 import numpy as np
 from PIL import Image, ImageDraw
 
-from generative_editing.decomposition import HeuristicSceneDecomposer, SceneLayout, Weather
+from generative_editing.decomposition import (
+    HeuristicSceneDecomposer,
+    SceneLayout,
+    Weather,
+)
 from generative_editing.editing import MockWeatherEditor, weather_prompt
 from generative_editing.evaluation import (
     EditMetrics,
     candidate_score,
     evaluate_edit,
-    passes_preservation,
+    passes_gates,
 )
 from generative_editing.pipeline import WeatherEditingPipeline
 
@@ -54,12 +58,16 @@ class _SeedKeyedEditor:
         if seed % 2 == 0:
             noise = np.random.default_rng(seed).uniform(0, 255, rgb.shape)
             return Image.fromarray(noise.astype(np.uint8), mode="RGB")
-        return Image.fromarray(np.clip(rgb * 0.8 + 20.0, 0, 255).astype(np.uint8), mode="RGB")
+        return Image.fromarray(
+            np.clip(rgb * 0.8 + 20.0, 0, 255).astype(np.uint8), mode="RGB"
+        )
 
 
 def test_pipeline_selects_more_preserving_candidate() -> None:
     source = _scene()
-    pipeline = WeatherEditingPipeline(HeuristicSceneDecomposer(), _SeedKeyedEditor(), candidates=2)
+    pipeline = WeatherEditingPipeline(
+        HeuristicSceneDecomposer(), _SeedKeyedEditor(), candidates=2
+    )
 
     result = pipeline.run(source, Weather.OVERCAST, seed=0)
 
@@ -88,6 +96,8 @@ def test_candidate_score_rejects_missing_edit() -> None:
 
     assert candidate_score(unedited) == float("-inf")
     assert candidate_score(edited) > candidate_score(unedited)
+    assert not passes_gates(unedited)
+    assert passes_gates(edited)
 
 
 def test_layout_drift_flags_added_people_and_land() -> None:
@@ -111,17 +121,39 @@ def test_layout_drift_flags_added_people_and_land() -> None:
     edited = Image.new("RGB", shape[::-1], "darkgray")
     matte = np.ones(shape, dtype=np.float32)
 
-    clean = evaluate_edit(image, edited, matte, source_layout=source_layout, candidate_layout=source_layout)
-    drifted = evaluate_edit(image, edited, matte, source_layout=source_layout, candidate_layout=drifted_layout)
-    ponded = evaluate_edit(image, edited, matte, source_layout=source_layout, candidate_layout=ponded_layout)
+    clean = evaluate_edit(
+        image,
+        edited,
+        matte,
+        source_layout=source_layout,
+        candidate_layout=source_layout,
+    )
+    drifted = evaluate_edit(
+        image,
+        edited,
+        matte,
+        source_layout=source_layout,
+        candidate_layout=drifted_layout,
+    )
+    ponded = evaluate_edit(
+        image,
+        edited,
+        matte,
+        source_layout=source_layout,
+        candidate_layout=ponded_layout,
+    )
 
-    assert clean.protected_gain == 0.0 and clean.water_loss == 0.0 and clean.water_gain == 0.0
+    assert (
+        clean.protected_gain == 0.0
+        and clean.water_loss == 0.0
+        and clean.water_gain == 0.0
+    )
     assert drifted.protected_gain > 0.002
     assert drifted.water_loss > 0.08
     assert ponded.water_gain > 0.02
-    assert passes_preservation(clean)
-    assert not passes_preservation(drifted)
-    assert not passes_preservation(ponded)
+    assert passes_gates(clean)
+    assert not passes_gates(drifted)
+    assert not passes_gates(ponded)
     assert candidate_score(drifted) < candidate_score(clean)
     assert candidate_score(ponded) < candidate_score(clean)
 
@@ -132,7 +164,9 @@ class _DriftKeyedEditor:
     def edit(self, image: Image.Image, weather: Weather, seed: int) -> Image.Image:
         rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
         shade = 0.8 if seed % 2 else 0.79
-        result = Image.fromarray(np.clip(rgb * shade + 15.0, 0, 255).astype(np.uint8), mode="RGB")
+        result = Image.fromarray(
+            np.clip(rgb * shade + 15.0, 0, 255).astype(np.uint8), mode="RGB"
+        )
         result.info["seed"] = seed
         return result
 
@@ -148,12 +182,29 @@ class _DriftKeyedDecomposer(HeuristicSceneDecomposer):
 
 
 def test_pipeline_prefers_gated_candidate_over_higher_score() -> None:
-    pipeline = WeatherEditingPipeline(_DriftKeyedDecomposer(), _DriftKeyedEditor(), candidates=2)
+    pipeline = WeatherEditingPipeline(
+        _DriftKeyedDecomposer(), _DriftKeyedEditor(), candidates=2
+    )
 
     result = pipeline.run(_scene(), Weather.OVERCAST, seed=0)
 
     assert result.seed == 1
     assert result.passed
+
+
+class _NoEditEditor:
+    def edit(self, image: Image.Image, weather: Weather, seed: int) -> Image.Image:
+        return image.copy()
+
+
+def test_pipeline_marks_result_failed_when_all_candidates_miss_edit_gate() -> None:
+    pipeline = WeatherEditingPipeline(
+        HeuristicSceneDecomposer(), _NoEditEditor(), candidates=2
+    )
+
+    result = pipeline.run(_scene(), Weather.OVERCAST, seed=0)
+
+    assert not result.passed
 
 
 def test_snow_prompt_preserves_water_and_object_inventory() -> None:

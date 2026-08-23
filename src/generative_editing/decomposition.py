@@ -5,9 +5,14 @@ from typing import Protocol, Self
 
 import cv2
 import numpy as np
+import torch
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, model_validator
-
+from transformers import (
+    AutoImageProcessor,
+    AutoModelForDepthEstimation,
+    AutoModelForSemanticSegmentation,
+)
 
 WEATHER_SURFACE_NAMES = {
     "earth",
@@ -123,7 +128,9 @@ class SceneDecomposition(BaseModel):
             )
         )
         matte *= 0.25 + 0.75 * self.confidence
-        return np.clip(cv2.GaussianBlur(matte.astype(np.float32), (0, 0), sigmaX=1.2), 0.0, 1.0)
+        return np.clip(
+            cv2.GaussianBlur(matte.astype(np.float32), (0, 0), sigmaX=1.2), 0.0, 1.0
+        )
 
 
 class SceneLayout(BaseModel):
@@ -171,7 +178,9 @@ class HeuristicSceneDecomposer:
             base_confidence = 0.55
 
         atmosphere = np.broadcast_to((1.0 - vertical) ** 1.5, (height, width)).copy()
-        surface = np.broadcast_to(np.clip((vertical - 0.42) / 0.58, 0.0, 1.0), (height, width)).copy()
+        surface = np.broadcast_to(
+            np.clip((vertical - 0.42) / 0.58, 0.0, 1.0), (height, width)
+        ).copy()
         structure = _build_structure_guard(edges, sky)
         confidence = np.full((height, width), base_confidence, dtype=np.float32)
         confidence = np.maximum(confidence, 0.70 * sky)
@@ -209,16 +218,19 @@ class TransformerSceneDecomposer:
         depth_model: str = "depth-anything/Depth-Anything-V2-Small-hf",
         device: str | None = None,
     ) -> None:
-        import torch
-        from transformers import AutoImageProcessor, AutoModelForDepthEstimation
-        from transformers import AutoModelForSemanticSegmentation
 
         self._torch = torch
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.segmentation_processor = AutoImageProcessor.from_pretrained(segmentation_model)
-        self.segmentation_model = AutoModelForSemanticSegmentation.from_pretrained(segmentation_model).to(self.device)
+        self.segmentation_processor = AutoImageProcessor.from_pretrained(
+            segmentation_model
+        )
+        self.segmentation_model = AutoModelForSemanticSegmentation.from_pretrained(
+            segmentation_model
+        ).to(self.device)
         self.depth_processor = AutoImageProcessor.from_pretrained(depth_model)
-        self.depth_model = AutoModelForDepthEstimation.from_pretrained(depth_model).to(self.device)
+        self.depth_model = AutoModelForDepthEstimation.from_pretrained(depth_model).to(
+            self.device
+        )
 
     def decompose(self, image: Image.Image) -> SceneDecomposition:
         torch = self._torch
@@ -227,7 +239,9 @@ class TransformerSceneDecomposer:
 
         labels_np, confidence_np = self._segment(rgb_image)
         with torch.inference_mode():
-            depth_inputs = self.depth_processor(images=rgb_image, return_tensors="pt").to(self.device)
+            depth_inputs = self.depth_processor(
+                images=rgb_image, return_tensors="pt"
+            ).to(self.device)
             depth = self.depth_model(**depth_inputs).predicted_depth.unsqueeze(1)
             depth = torch.nn.functional.interpolate(
                 depth, size=(height, width), mode="bicubic", align_corners=False
@@ -237,9 +251,13 @@ class TransformerSceneDecomposer:
         id2label = self.segmentation_model.config.id2label
 
         sky = np.isin(labels_np, _label_ids(id2label, {"sky"})).astype(np.float32)
-        weather_surface = np.isin(labels_np, _label_ids(id2label, WEATHER_SURFACE_NAMES)).astype(np.float32)
+        weather_surface = np.isin(
+            labels_np, _label_ids(id2label, WEATHER_SURFACE_NAMES)
+        ).astype(np.float32)
         water = np.isin(labels_np, _label_ids(id2label, WATER_NAMES)).astype(np.float32)
-        protected = np.isin(labels_np, _label_ids(id2label, PROTECTED_NAMES)).astype(np.uint8)
+        protected = np.isin(labels_np, _label_ids(id2label, PROTECTED_NAMES)).astype(
+            np.uint8
+        )
 
         far_likelihood = _far_likelihood(depth_np, sky)
         atmosphere = cv2.GaussianBlur(far_likelihood, (0, 0), sigmaX=2.0)
@@ -268,10 +286,15 @@ class TransformerSceneDecomposer:
     def _segment(self, rgb_image: Image.Image) -> tuple[np.ndarray, np.ndarray]:
         torch = self._torch
         with torch.inference_mode():
-            seg_inputs = self.segmentation_processor(images=rgb_image, return_tensors="pt").to(self.device)
+            seg_inputs = self.segmentation_processor(
+                images=rgb_image, return_tensors="pt"
+            ).to(self.device)
             seg_logits = self.segmentation_model(**seg_inputs).logits
             seg_logits = torch.nn.functional.interpolate(
-                seg_logits, size=(rgb_image.height, rgb_image.width), mode="bilinear", align_corners=False
+                seg_logits,
+                size=(rgb_image.height, rgb_image.width),
+                mode="bilinear",
+                align_corners=False,
             )
             probabilities = seg_logits.softmax(dim=1)[0]
             confidence, labels = probabilities.max(dim=0)
@@ -289,7 +312,11 @@ def _top_connected(mask: np.ndarray) -> np.ndarray:
 
 def _label_ids(id2label: dict[int, str], names: set[str]) -> list[int]:
     normalized = {name.casefold() for name in names}
-    return [int(label_id) for label_id, label in id2label.items() if label.casefold() in normalized]
+    return [
+        int(label_id)
+        for label_id, label in id2label.items()
+        if label.casefold() in normalized
+    ]
 
 
 def _build_structure_guard(
@@ -304,7 +331,12 @@ def _build_structure_guard(
     )
     static_edges = edges.copy()
     static_edges[transient_interior > 0] = 0
-    guard = cv2.dilate(static_edges, np.ones((3, 3), np.uint8), iterations=1).astype(np.float32) / 255.0
+    guard = (
+        cv2.dilate(static_edges, np.ones((3, 3), np.uint8), iterations=1).astype(
+            np.float32
+        )
+        / 255.0
+    )
     if protected is not None:
         guard = np.maximum(guard, protected)
     return guard.astype(np.float32)

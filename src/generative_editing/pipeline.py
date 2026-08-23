@@ -11,9 +11,18 @@ import numpy as np
 from PIL import Image
 from pydantic import BaseModel, ConfigDict
 
-from generative_editing.decomposition import SceneDecomposer, SceneDecomposition, Weather
+from generative_editing.decomposition import (
+    SceneDecomposer,
+    SceneDecomposition,
+    Weather,
+)
 from generative_editing.editing import ImageEditor
-from generative_editing.evaluation import EditMetrics, candidate_score, evaluate_edit, passes_preservation
+from generative_editing.evaluation import (
+    EditMetrics,
+    candidate_score,
+    evaluate_edit,
+    passes_gates,
+)
 
 
 class PipelineResult(BaseModel):
@@ -39,18 +48,24 @@ class PipelineResult(BaseModel):
             "generation_matte": self.generation_matte,
         }
         for name, mask in masks.items():
-            Image.fromarray((np.clip(mask, 0.0, 1.0) * 255).astype(np.uint8)).save(directory / f"{name}.png")
+            Image.fromarray((np.clip(mask, 0.0, 1.0) * 255).astype(np.uint8)).save(
+                directory / f"{name}.png"
+            )
 
 
 class WeatherEditingPipeline:
-    def __init__(self, decomposer: SceneDecomposer, editor: ImageEditor, candidates: int = 1) -> None:
+    def __init__(
+        self, decomposer: SceneDecomposer, editor: ImageEditor, candidates: int = 1
+    ) -> None:
         if candidates < 1:
             raise ValueError("At least one candidate is required")
         self.decomposer = decomposer
         self.editor = editor
         self.candidates = candidates
 
-    def run(self, image: Image.Image, weather: Weather, seed: int = 0) -> PipelineResult:
+    def run(
+        self, image: Image.Image, weather: Weather, seed: int = 0
+    ) -> PipelineResult:
         source = image.convert("RGB")
         decomposition = self.decomposer.decompose(source)
         source_layout = self.decomposer.layout(source)
@@ -70,7 +85,7 @@ class WeatherEditingPipeline:
                 source_layout,
                 self.decomposer.layout(candidate),
             )
-            passed = passes_preservation(metrics)
+            passed = passes_gates(metrics)
             key = (passed, candidate_score(metrics))
             if best is None or key > best_key:
                 best = PipelineResult(

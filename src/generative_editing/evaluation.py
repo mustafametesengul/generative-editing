@@ -29,7 +29,10 @@ def evaluate_edit(
     candidate_layout: SceneLayout | None = None,
 ) -> EditMetrics:
     source = np.asarray(original.convert("RGB"), dtype=np.float32) / 255.0
-    result = np.asarray(edited.convert("RGB").resize(original.size), dtype=np.float32) / 255.0
+    result = (
+        np.asarray(edited.convert("RGB").resize(original.size), dtype=np.float32)
+        / 255.0
+    )
     support = np.clip(matte, 0.0, 1.0)
     weak_support = 1.0 - support
 
@@ -41,20 +44,27 @@ def evaluate_edit(
     source_edges = cv2.Canny((source.mean(axis=2) * 255).astype(np.uint8), 70, 160) > 0
     result_edges = cv2.Canny((result.mean(axis=2) * 255).astype(np.uint8), 70, 160) > 0
     if structure_guard is None:
-        structure_region = cv2.dilate(source_edges.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+        structure_region = (
+            cv2.dilate(source_edges.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+        )
     else:
         if structure_guard.shape != source_edges.shape:
             raise ValueError("Structure guard dimensions must match the source image")
-        structure_region = cv2.dilate(
-            (structure_guard > 0.1).astype(np.uint8), np.ones((5, 5), np.uint8)
-        ) > 0
+        structure_region = (
+            cv2.dilate(
+                (structure_guard > 0.1).astype(np.uint8), np.ones((5, 5), np.uint8)
+            )
+            > 0
+        )
     edge_f1 = _tolerant_edge_f1(source_edges, result_edges, structure_region)
 
     protected_gain = 0.0
     water_loss = 0.0
     water_gain = 0.0
     if source_layout is not None and candidate_layout is not None:
-        protected_gain, water_loss, water_gain = _layout_drift(source_layout, candidate_layout)
+        protected_gain, water_loss, water_gain = _layout_drift(
+            source_layout, candidate_layout
+        )
 
     return EditMetrics(
         global_edit_mae=global_edit_mae,
@@ -97,21 +107,25 @@ def candidate_score(metrics: EditMetrics, minimum_edit: float = 0.02) -> float:
     )
 
 
-def passes_preservation(
+def passes_gates(
     metrics: EditMetrics,
+    minimum_edit: float = 0.02,
     max_protected_gain: float = 0.001,
     max_water_loss: float = 0.03,
     max_water_gain: float = 0.02,
 ) -> bool:
-    """Hard gate: no invented protected content, no water turned solid, no ponds over solid ground."""
+    """Hard gates for visible editing and semantic preservation."""
     return (
-        metrics.protected_gain <= max_protected_gain
+        metrics.semantic_support_mae >= minimum_edit
+        and metrics.protected_gain <= max_protected_gain
         and metrics.water_loss <= max_water_loss
         and metrics.water_gain <= max_water_gain
     )
 
 
-def _tolerant_edge_f1(source: np.ndarray, result: np.ndarray, region: np.ndarray) -> float:
+def _tolerant_edge_f1(
+    source: np.ndarray, result: np.ndarray, region: np.ndarray
+) -> float:
     kernel = np.ones((3, 3), np.uint8)
     source_dilated = cv2.dilate(source.astype(np.uint8), kernel) > 0
     result_dilated = cv2.dilate(result.astype(np.uint8), kernel) > 0

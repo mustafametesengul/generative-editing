@@ -10,6 +10,14 @@ The pipeline **generates, verifies, and selects** candidates. FLUX.2 Klein edits
 
 More examples, masks, and metrics: [demo README](artifacts/weather_demo/README.md).
 
+## Prototype boundary
+
+| Implemented and tested | Production design only |
+| --- | --- |
+| Heuristic or SegFormer + Depth decomposition; soft edit/generation mattes; full-frame FLUX or mock editing; seeded candidate selection; minimum-edit and three class-map drift gates; guarded-edge/leakage ranking; debug masks | OCR and instance/identity matching; generation-matte enforcement; weather and unusual-input classifiers; learned realism/artifact scoring; TensorRT deployment; video consistency; policy service, C2PA, and watermarking; fine-tuning and distillation |
+
+The prototype is evidence for the data flow, not a production safety claim. In particular, semantic area drift cannot prove unchanged object count or identity. The CLI writes an output only when a candidate passes the implemented gates.
+
 ## Deliverables
 
 - [Assumptions and domain](docs/ASSUMPTIONS.md)
@@ -53,6 +61,8 @@ uv run generative-editing input.jpg output.jpg \
 ```
 
 This lazily downloads `black-forest-labs/FLUX.2-klein-4B`, SegFormer-B2, and Depth Anything V2 Small from Hugging Face. No weights are included in this repository. Add `--cpu-offload` below 13 GiB at a substantial latency cost.
+
+FLUX generation is capped near one megapixel. Larger inputs are downsampled before editing and resized back afterward, which preserves dimensions but can lose fine detail.
 
 ## Hardware recommendation
 

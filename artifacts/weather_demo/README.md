@@ -2,19 +2,19 @@
 
 All edits use transformer decomposition, `black-forest-labs/FLUX.2-klein-4B`, four inference steps, and an NVIDIA L4. Each case generates four seeded candidates; the verifier scores them against the Task 1 contract, hard-gates semantic drift (added people/vehicles, water turned to land, new water over solid ground), and keeps the best passing candidate.
 
-The edit matte shows where change is allowed. Change elsewhere counts against the candidate. The generation matte shows where new texture like snow or rain particles may appear. A per-candidate segmentation feeds the drift gates.
+The edit matte shows where appearance change is supported; change elsewhere is penalized. The generation matte visualizes where new weather texture should appear, but the prototype does not yet enforce it. A per-candidate segmentation feeds the drift gates.
 
 ![Source, result, appearance matte, and generation matte](contact_sheet.jpg)
 
 ## Results
 
 | Case | Target | Selected seed | Global MAE | Weak-support MAE | Structure edge F1 | Protected gain | Water loss | Water gain | Passed |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | [urban_rain](results/urban_rain.png) | rain | 14 | 0.134 | 0.123 | 0.874 | 0.000 | 0.000 | 0.000 | yes |
 | [mountain_fog](results/mountain_fog.png) | fog | 25 | 0.147 | 0.121 | 0.486 | 0.000 | 0.000 | 0.018 | yes |
 | [coastal_snow](results/coastal_snow.png) | snow | 54 | 0.279 | 0.293 | 0.756 | 0.000 | 0.006 | 0.003 | yes |
 
-Weak-support MAE is intentionally nonzero: weather legitimately changes illumination across the whole frame, so pixel identity outside the mattes is not a gate. Fog and diffuse rain attenuate edge contrast, so structure-edge thresholds are calibrated per target rather than compared directly across weather types.
+Weak-support MAE is intentionally nonzero: weather legitimately changes illumination across the whole frame, so pixel identity outside the mattes is not a gate. Structure edge F1 is a reported ranking signal, not a hard gate in this prototype; production thresholds would be calibrated separately for each weather and scene slice.
 
 ## Observations
 

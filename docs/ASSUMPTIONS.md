@@ -18,12 +18,12 @@ The design carries over to other domains by swapping what counts as editable and
 ## Assumptions
 
 1. Inputs are licensed or user-owned photos. They may incidentally contain people or license plates, so everything is treated as sensitive.
-2. The main path handles one image up to about one megapixel. Bursts and video use the consistency extension in Task 2.
+2. FLUX works at up to about one megapixel in this prototype. Larger inputs are downsampled for generation and the result is resized back, so fine detail can be lost; bursts and video are design extensions, not implemented paths.
 3. The request is one of five fixed weather targets, not free editing text. An intensity slider is future work.
 4. There is no single correct output. Evaluation asks three questions: Did the weather change? Did everything else stay the same? Does it look real? Human reviewers also compare outputs side by side.
 5. When in doubt, preserve. Snow hidden behind a readable sign beats plausible snow that breaks the sign.
-6. Outputs are visualizations, not records of real conditions. Production outputs carry provenance metadata and a visible disclosure where needed.
+6. Outputs are visualizations, not records of real conditions. Provenance metadata and visible disclosure are production requirements; the prototype does not add them.
 7. Inference runs locally in a trusted environment; raw inputs never go to a third-party API.
-8. The inference GPU is an NVIDIA L4 (24 GiB); the demo artifacts were generated on one.
+8. The inference target is an NVIDIA L4 (24 GiB), and the demo artifacts were generated on one. The model-card memory estimate is not a substitute for measuring end-to-end peak VRAM and latency.
 9. Model choices are current as of 22 August 2026 and should be re-checked against the same benchmark when new checkpoints appear.
 10. No model weights, sensitive samples, or claims about real events are included in this submission.
