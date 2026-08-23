@@ -23,6 +23,7 @@ The prototype demonstrates the data flow; it is not a production safety claim. I
 - [Task 1: understanding the scene](docs/TASK1_PERCEPTION.md)
 - [Task 2: editing and evaluation](docs/TASK2_GENERATION.md)
 - [Task 3: training and deployment](docs/TASK3_TRAINING_DISTILLATION.md)
+- [AI usage disclosure](docs/AI_USAGE.md)
 - [Task 1 prototype](src/generative_editing/decomposition.py)
 - Task 2: [editing](src/generative_editing/editing.py), [pipeline](src/generative_editing/pipeline.py), and [evaluation](src/generative_editing/evaluation.py)
 - [L4 demo and attribution](artifacts/weather_demo/README.md)
