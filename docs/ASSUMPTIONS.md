@@ -1,29 +1,27 @@
-# Domain, Edit Contract, and Assumptions
+# Domain and Assumptions
 
 ## Domain choice
 
-The domain is **single outdoor photos with the weather changed**: clear, overcast, rain, snow, or fog. Weather is a good testbed because it is neither one object nor a global style. It touches the sky, visibility over distance, lighting, falling particles, and how surfaces look (wet roads, snow cover). The system has to change all of that without moving an edge, changing a face, breaking text, or inventing an object. This makes preservation failures much easier to spot than they would be in a simple recoloring task.
+The domain is **changing weather in a single outdoor photo**: clear, overcast, rain, snow, or fog. Weather is a useful test because it changes sky, light, visibility, and surfaces at once. Yet the camera, objects, people, text, and geometry must stay fixed. That makes mistakes easy to see.
 
-The design carries over to other domains by swapping what counts as editable and how it is checked; the perception contract, editor, verifier, and gates stay the same.
+The same design can serve another domain by changing the edit rules and checks while keeping the map, editor, verifier, and gates.
 
 ## Edit contract
 
 | Category | Attributes |
 | --- | --- |
-| Editable | Sky and clouds; precipitation; fog and visibility; overall lighting and color temperature; how surfaces respond (wetness, reflections, snow cover). |
-| Hard invariant | Camera viewpoint and crop; object count, identity, pose, and position; geometry and silhouettes; faces; text, signs, logos, license plates. |
-| Soft invariant | Materials, local texture, fine edges, and scene meaning. Their brightness and color may shift with the new lighting, but their structure must not. |
-| Out of scope | Time-of-day or season changes; adding or removing objects; physically accurate weather simulation; forensic or evidentiary use. |
+| May change | Sky, precipitation, fog, lighting, wetness, reflections, and snow cover |
+| Must not change | Camera, crop, objects, identity, pose, geometry, faces, text, signs, logos, and plates |
+| May shift slightly | Material color and brightness, but not texture or structure |
+| Out of scope | Time or season changes, adding objects, physical simulation, or evidentiary use |
 
 ## Assumptions
 
-1. Inputs are licensed or user-owned photos. They may incidentally contain people or license plates, so everything is treated as sensitive.
-2. FLUX works at up to about one megapixel in this prototype. Larger inputs are downsampled for generation and the result is resized back, so fine detail can be lost; bursts and video are design extensions, not implemented paths.
-3. The request is one of five fixed weather targets, not free editing text. An intensity slider is future work.
-4. There is no single correct output. Evaluation asks three questions: Did the weather change? Did everything else stay the same? Does it look real? Human reviewers also compare outputs side by side.
-5. When in doubt, preserve. Snow hidden behind a readable sign beats plausible snow that breaks the sign.
-6. Outputs are visualizations, not records of real conditions. Provenance metadata and visible disclosure are production requirements; the prototype does not add them.
-7. Inference runs locally in a trusted environment; raw inputs never go to a third-party API.
-8. The inference target is an NVIDIA L4 (24 GiB), and the demo artifacts were generated on one. The model-card memory estimate is not a substitute for measuring end-to-end peak VRAM and latency.
-9. Model choices are current as of 22 August 2026 and should be re-checked against the same benchmark when new checkpoints appear.
-10. No model weights, sensitive samples, or claims about real events are included in this submission.
+1. Inputs are licensed or user-owned. Because they may show people or plates, treat all inputs as sensitive.
+2. The prototype edits at about one megapixel. Larger photos are reduced and resized back, which can lose detail. Video is not implemented.
+3. Users choose one of five weather targets. There is no free-text editing or intensity control.
+4. Evaluation asks: Did the weather change? Is it still the same scene? Does it look real? Human reviewers compare images side by side.
+5. Preservation wins when goals conflict. A readable sign matters more than perfect snow.
+6. Outputs are synthetic visualizations, not evidence of real conditions. Production needs provenance and a visible disclosure; the prototype does not add them.
+7. Inference is local. The target is an NVIDIA L4 (24 GiB), but peak memory and latency must be measured end to end.
+8. Model choices are current as of 22 August 2026. This repository includes no model weights, sensitive samples, or claims about real events.

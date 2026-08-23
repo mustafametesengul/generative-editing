@@ -1,6 +1,8 @@
-# Task 2: Selective Weather Editing
+# Task 2: Changing Weather Without Changing the Scene
 
-## Architecture and selected model
+The editor has one job: make the requested weather obvious while keeping the photograph recognizable as the same scene.
+
+## The pipeline
 
 ```mermaid
 flowchart TD
@@ -15,52 +17,60 @@ flowchart TD
     G -->|all fail| I[Retry or reject]
 ```
 
-**Selected checkpoint:** [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B), a 4B rectified-flow transformer with native image editing, four-step inference, an Apache 2.0 license, and a model-card estimate of ~13 GiB VRAM. This leaves a plausible margin on a 24 GiB L4, but combined peak VRAM with perception must still be measured. Alternatives: Qwen-Image-Edit-2511 is 20B and its reference configuration uses 40 steps; FLUX.1 Kontext is 12B under a non-commercial model license, as is Klein 9B. This selection remains a benchmark hypothesis, not a claim of general superiority.
+The selected model is [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B). It is a 4B rectified-flow transformer with image editing, four-step inference, and an Apache 2.0 license.
+
+Its model card reports about 13 GiB VRAM, leaving room on a 24 GiB L4. Peak memory must still be measured with the perception models running.
+
+This is a practical starting point, not a claim that FLUX is always best. Qwen-Image-Edit-2511 is larger and uses 40 steps in its reference setup. FLUX.1 Kontext and Klein 9B use non-commercial model licenses.
 
 ## Family comparison
 
 | Approach | Edit control | Preservation | Cost | Assessment |
 | --- | --- | --- | --- | --- |
-| Latent-diffusion inpainting | Excellent binary spatial control | Exact outside mask; seams at boundaries | Moderate, many denoising steps | Strong sky replacement baseline, weak for global illumination/fog |
-| ControlNet-style depth/edge conditioning | Explicit geometry retention | Strong structure if controls are reliable | Extra network and domain training | Add if prompt plus verification cannot preserve geometry |
-| Native rectified-flow transformer edit | Understands global instruction and image jointly | Strong semantic consistency, but can drift | Four steps for Klein | Selected candidate generator |
-| Large autoregressive/multimodal editor | Strong instruction reasoning | Often strong identity/text behavior | Too large/slow for L4 | Offline teacher/evaluation comparator |
+| Inpainting | Precise masked edits | Exact outside the mask; boundary seams | Many steps | Good sky-only baseline |
+| ControlNet-style conditioning | Holds depth and edges | Needs another model and training | Extra runtime cost | Add if geometry drifts |
+| Rectified-flow editor | Handles global weather and local detail together | Can change unrelated content | Four steps | Selected generator |
+| Large multimodal editor | Strong instruction following | Too large or slow for an L4 | High | Offline comparison model |
 
 ## Generate, verify, select
 
-Rectified flow is transformer-based (allowed by the brief) and uses four inference steps. This is full-frame conditional editing: the source image conditions the model, but no spatial mask is passed and every output pixel comes from the model.
+The source image conditions the model, but no spatial mask is passed to it. Every output pixel comes from the model.
 
-1. **Generate** K candidates (the demo uses 4 seeds) from the photo, fixed target prompt, and deterministic seed.
-2. **Verify** each one against the Task 1 contract. The prototype checks minimum visible change, guarded-edge similarity, leakage, and re-segmented area drift. Its protected-class gate detects newly occupied pixels, not object identity or count; production requires instance matching and OCR for those stronger guarantees.
-3. **Select** the highest-ranked candidate that passes every hard gate. The CLI writes no output if all candidates fail; a service may retry once with new seeds before returning a structured rejection.
+1. **Generate:** create four candidates with fixed prompts and different seeds.
+2. **Verify:** compare each candidate with the Task 1 edit contract.
+3. **Select:** return the best candidate that passes every gate. If all fail, write no output; a service may retry once before rejecting the request.
 
-**Prompts.** Exploratory L4 runs used short and long variants. Short prompts preserved rain and fog scenes better in those runs; wetness instructions often introduced ponds. Snow needed explicit liquid-water constraints because the short variant froze open water. These observations motivated the fixed prompts in `editing.py`, but the small runs are not a benchmark. Prompt changes must be evaluated per target on the held-out suite because negative instructions can introduce the concept they are meant to prevent.
+The prototype checks visible change, edge similarity, change outside the edit area, and movement in semantic masks. It cannot prove that object identity or count stayed fixed; production needs instance matching and OCR for that.
 
-The CLI ships two editors behind one protocol: `Flux2KleinEditor` (real Diffusers pipeline) and `MockWeatherEditor` (deterministic, no weights), both running the same decomposition, verification, and selection.
+Semantic masks matter because pixel difference alone cannot tell useful snow from a shoreline that moved.
+
+**Prompt lesson.** Short prompts worked better for rain and fog in early tests because long descriptions introduced unwanted ponds. Snow needed one explicit rule: open water must remain liquid. These runs guided the current prompts but are not a benchmark; every prompt change must be tested on the held-out set.
+
+The CLI provides a real `Flux2KleinEditor` and a deterministic, weight-free `MockWeatherEditor`. Both use the same verification path.
 
 ## Evaluation methodology
 
-Evaluate on a held-out set with real examples of all five weather types, the hard cases from Task 1, and human ratings. Report results per weather target and scene type, not just one average.
+Evaluation uses held-out examples of all five weather types, the hard cases from Task 1, and human ratings. Results are reported by weather and scene type, not only as one average.
 
 | Axis | Automated measurements | Human question |
 | --- | --- | --- |
-| Edit fidelity | Weather-classifier target margin; CLIP margin; precipitation/wet-surface probes; fog transmission vs. depth | “Is the requested weather unambiguous and coherent?” |
-| Preservation | Edge F1 near structure; segment/OCR/identity consistency; layout-drift gates | “Is this unmistakably the same scene?” |
-| Realism | KID/FID vs. real target-weather sets; artifact detector; pairwise preference | “Could this be a real photograph?” |
-| Safety | Policy classifiers; protected-content drift; provenance presence | “Could this be deceptive in context?” |
+| Edit fidelity | Weather margin; CLIP margin; weather-specific probes | “Is the requested weather clear?” |
+| Preservation | Edge F1; segment, OCR, and identity checks | “Is this still the same scene?” |
+| Realism | KID/FID; artifact detector; pairwise preference | “Could this be a real photo?” |
+| Safety | Policy checks; protected-content drift; provenance | “Could this mislead someone?” |
 
-The table is the release evaluation design. The prototype implements support-weighted MAE, edge F1, and three class-map drift measures; it does not implement weather classification, OCR/identity checks, KID/FID, an artifact detector, or human-rating collection. Its metrics are smoke tests, not evidence that all four axes are solved.
+The prototype implements weighted pixel change, edge F1, and three semantic-drift measures. Weather classification, OCR/identity checks, KID/FID, artifact detection, and human ratings belong to the release evaluation.
 
-### Edit vs. preservation vs. realism
+### How the winner is chosen
 
-The decision is lexicographic, not one blended score: a realistic storm cannot compensate for a changed person or shoreline.
+Use **gates first, ranking second**. A realistic storm cannot make up for a changed person or shoreline.
 
 **Prototype policy.** Reject a candidate unless all four measured gates pass:
 
 | Gate | Threshold | Meaning |
 | --- | ---: | --- |
-| Edit support MAE | $\ge 0.02$ | The licensed region changed visibly; this is only a proxy for correct weather. |
-| Protected-class gain | $\le 0.001$ of image pixels | Segmentation found little new person/vehicle/sign occupancy. |
+| Edit support MAE | $\ge 0.02$ | The intended area changed visibly; this does not prove the weather is correct. |
+| Protected-class gain | $\le 0.001$ of image pixels | Little new person, vehicle, or sign area appeared. |
 | Source-water loss | $\le 0.03$ of source water | Water did not become non-water/non-sky. |
 | New-water gain | $\le 0.02$ of image pixels | Solid ground did not become a large water region. |
 
@@ -68,23 +78,27 @@ Passing candidates are ranked by
 
 $$S = F_{edge} - 2E_{outside} - 50D_{protected} - 8D_{water\ loss} - 8D_{water\ gain}.$$
 
-Here $F_{edge}$ rewards guarded-edge retention and the other terms penalize leakage and semantic drift. Pixel identity is not a gate because weather legitimately changes illumination across most of the frame. This score intentionally does **not** claim to measure realism or whether the target weather is semantically correct.
+The score rewards stable edges and penalizes change outside the edit area or in protected classes. Pixel identity is not a gate because weather can change lighting across the full image. The score does **not** measure realism or prove that the requested weather is correct.
 
-**Production policy.** Keep the semantic, OCR, identity, and safety checks as hard gates; add a calibrated target-weather margin as an edit-fidelity gate. Rank only the survivors by an artifact/realism model, target margin, and human-calibrated pairwise preference. Thresholds are set per weather and scene slice on validation data, then frozen before model comparison. If no candidate passes, retry within a fixed compute budget or reject; never relax a preservation gate to obtain a stronger edit.
+In production, semantic, OCR, identity, weather, and safety checks remain hard gates. Only passing candidates are ranked for realism and edit strength.
+
+Thresholds are tuned by weather and scene type, then frozen before comparing models. If nothing passes, retry within a fixed budget or reject. Never weaken preservation to get a stronger storm.
 
 ## Consistency across related inputs
 
-For video or bursts: estimate camera motion and optical flow, carry the decomposition and noise initialization from frame to frame, share the weather target across a short window, and keep particles consistent in 3D instead of re-rolling them per frame. Detect cuts before propagating anything. For unordered photos of one place, share the weather target and check consistency across views. Single images make no temporal promises.
+For video or bursts, carry masks and initial noise across frames with optical flow, share the weather target over a short window, and detect cuts before reusing anything. Keep rain and snow particles consistent in 3D. For multiple photos of one place, verify weather consistency across views. The prototype handles single images only.
 
 ## Scalability and operations
 
-- Production targets TensorRT FP16/INT8 perception services and a long-lived BF16 four-step generator worker. Batch size one is the interactive default; small batches serve offline work.
-- L4 is the inference baseline; CPU offload is a compatibility mode. A100/H100 only for training and bulk evaluation.
-- Decompositions are cached per encrypted job and deleted with the source. Queue by pixel count; apply backpressure before running out of memory.
-- New model versions go through the frozen suite, then staged traffic with automatic rollback on any preservation, safety, or latency regression.
+- Keep perception and generation as long-running GPU workers; cache each decomposition for its encrypted job.
+- Use an L4 for inference and A100/H100 GPUs for training or bulk evaluation. CPU offload is a slow compatibility mode.
+- Queue by image size and limit work before GPU memory is exhausted.
+- Test new versions on the frozen suite, release gradually, and roll back on quality, safety, or latency regressions.
 
-With roughly 10x less GPU, use SegFormer-B0 at lower resolution, an INT8 two-step student, one candidate, and conservative rejection; restricted masked inpainting is the fallback for sky-only edits. For a 5x tighter latency target, remove multi-seed selection and spend the budget on one verified candidate. Lower realism or a higher rejection rate is acceptable; weaker preservation gates are not.
+With 10x less GPU, use SegFormer-B0, a lower resolution, one candidate, and an INT8 two-step student. Masked inpainting is a fallback for sky-only edits. For 5x lower latency, remove multi-seed selection and verify one candidate. Lower realism or more rejections are acceptable; weaker preservation gates are not.
 
 ## Misuse controls
 
-Weather editing can fabricate storm or flood evidence, unsafe road conditions, or hide when and where a photo was taken. The prototype implements only the fixed five-target interface. Production controls add documentary/evidentiary-content review, rate limits, audit logs, C2PA provenance, model/edit metadata, a watermark, and an explicit synthetic-weather disclosure. High-impact enterprise use needs purpose review and human approval. These controls are defense in depth; provenance and watermarks do not make deceptive use safe.
+Weather edits can fake storm or flood evidence, unsafe roads, or the conditions in which a photo was taken. The prototype limits users to five weather targets.
+
+Production also needs content review, rate limits, audit logs, C2PA metadata, a watermark, and a clear synthetic-weather label. High-impact uses require purpose review and human approval. No watermark can make deceptive use safe.

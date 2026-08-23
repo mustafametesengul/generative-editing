@@ -1,14 +1,16 @@
-# Task 1: Attribute Detection and Decomposition
+# Task 1: Understanding What May Change
+
+Before changing the weather, the system needs a map of the scene. It must know where weather belongs and what must stay untouched.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    A[RGB photo] --> B[Decode + EXIF strip]
+    A[RGB photo] --> B[Decode + remove EXIF]
     B --> C[SegFormer-B2]
     B --> D[Depth Anything V2]
     B --> E[Edges + OCR]
-    C --> F[Fusion]
+    C --> F[Fuse signals]
     D --> F
     E --> F
     F --> G[Edit contract]
@@ -18,66 +20,75 @@ flowchart TD
     I --> J
 ```
 
-The output is an edit contract with four soft masks (`sky`, `atmosphere`, `weather_surface`, and `structure_guard`), a confidence score for each pixel, and two weather-specific mattes. The generator never sees this contract; the verifier uses it to score and reject generated candidates.
+The result is an **edit contract**: soft masks that describe where change is reasonable.
 
-**Scope.** The architecture above is the production design. The prototype implements SegFormer + Depth Anything (or a weight-free heuristic fallback), edge guards, soft mattes, and semantic re-segmentation. OCR, instance matching, the weather classifier, TensorRT export, and specialist out-of-distribution routing are specified production components, not implemented prototype features.
+| Output | Meaning |
+| --- | --- |
+| `sky` | Clouds, sky color, and precipitation may change here. |
+| `weather_surface` | Roads, roofs, soil, and plants may look wet or snowy. |
+| `atmosphere` | Distant areas may lose contrast in fog. |
+| `structure_guard` | Important edges, objects, and text should stay fixed. |
+| `confidence` | How certain the segmentation model is at each pixel. |
 
-## How decomposition works
+The **edit matte** allows broad appearance changes such as lighting. The stricter **generation matte** marks where new detail, such as snow or rain, should appear. The generator does not see either mask; they are used to check its output.
 
-1. **Segment the scene.** SegFormer assigns each pixel a scene class, such as sky, road, water, person, or vehicle, and reports how confident it is.
-2. **Group the classes.** Sky becomes the `sky` mask. Roads, roofs, vegetation, and other weather-receptive terrain become the `weather_surface` mask.
-3. **Estimate distance.** Depth Anything produces relative depth. This becomes the `atmosphere` mask, with stronger values for distant regions where fog should have more effect.
-4. **Protect structure.** Image edges and protected objects form the `structure_guard`. OCR adds signs and other text in production so they remain readable. Edges in sky and water are ignored because those textures naturally change.
-5. **Make soft masks.** Mask boundaries are blurred instead of being hard cutoffs. SegFormer's maximum class probability supplies a useful uncertainty signal, but it is not calibrated probability of correctness; distribution shift can still produce confident errors.
-6. **Build weather-specific mattes.** The target weather determines how much sky, surface, and distance matter. Confidence reduces support in uncertain regions. The **edit matte** allows appearance changes such as brightness and color; the stricter **generation matte** allows new detail such as rain, clouds, fog, or snow cover.
+> **Prototype scope:** the code implements SegFormer, Depth Anything, edge guards, soft masks, and re-segmentation. OCR, instance matching, unusual-input detection, and TensorRT deployment are production additions.
 
-The implemented masks and scores are produced automatically at runtime; no user annotation is required.
+## From photo to edit contract
 
-## How verification uses the contract
+1. **Name each region.** SegFormer labels pixels as sky, road, water, person, vehicle, and so on.
+2. **Estimate distance.** Depth Anything gives relative depth, which helps fog grow stronger with distance.
+3. **Protect structure.** Strong edges and protected classes form the guard mask. Production OCR also protects signs and text.
+4. **Blend uncertain boundaries.** Soft edges avoid visible seams. Low confidence reduces permission to edit.
 
-1. **Re-analyze the candidate.** Production runs segmentation, OCR, and instance matching on each candidate. The prototype re-runs semantic segmentation only.
-2. **Check allowed changes.** The prototype measures appearance change inside and outside the **edit matte**. The **generation matte** is exported for inspection but is not yet enforced because that requires a detector that separates new weather detail from lighting change.
-3. **Check preservation.** The prototype compares guarded edges and class-map area drift for protected classes and water. Production adds OCR equality, instance correspondence, and identity embeddings; these are needed to support object-count, text, and identity claims reliably.
-4. **Select or reject.** The prototype applies visible-edit and semantic-drift gates, then ranks survivors by its transparent preservation score. Production adds a target-weather classifier and a learned artifact/realism scorer calibrated against human ratings.
+Confidence is a warning signal, not proof. A model can still be confidently wrong on a new camera or unusual scene.
+
+## How candidates are checked
+
+Each generated candidate is compared with the source:
+
+- Did enough change inside the edit area?
+- Did too much change outside it?
+- Did guarded edges move or disappear?
+- Did people, vehicles, water, or land appear in new places?
+
+The prototype uses pixel change, edge similarity, and semantic masks. Production adds OCR, object-instance matching, and identity embeddings. Those additions are needed before claiming that text, object count, or identity is truly preserved.
 
 ## Model choice and trade-offs
 
-**Baseline: SegFormer-B2 + Depth Anything V2 Small.** SegFormer's ADE20K labels already separate sky from weather-receptive surfaces (road, grass, earth, roof). B2 is the accuracy/latency sweet spot; B0 is the edge fallback, B5 the server option. Depth matters because fog should get thicker with distance, not sit on the image like a flat veil.
+**SegFormer-B2 + Depth Anything V2 Small** is the baseline. SegFormer is fast and already recognizes the main weather regions. Depth keeps fog from looking like a flat gray overlay.
 
 | Option | Strength | Limitation | Decision |
 | --- | --- | --- | --- |
-| SegFormer | Efficient dense semantics; mature TensorRT path | Closed label set; thin objects imperfect | Primary runtime model |
-| Mask2Former/OneFormer | Strong boundaries, panoptic instances | Higher latency/memory | Offline teacher, hard-case fallback |
-| SAM 3 | Strong promptable/open-vocabulary masks; adapts to new concepts | Needs prompts and rules to turn masks into scene categories; higher, less predictable runtime cost | Annotation accelerator, offline teacher, or hard-case fallback |
-| Depth Anything V2 | Cheap zero-shot relative depth | Scale/orientation ambiguous | Fuse with sky/ground priors; never metric |
-| Weather classifier | Cheap check for current weather and unusual inputs | No localization | Production auxiliary head; absent from prototype |
+| SegFormer | Fast scene segmentation | Fixed labels; weak on thin objects | Runtime model |
+| Mask2Former / OneFormer | Better boundaries and object instances | More memory and latency | Teacher or fallback |
+| SAM 3 | New concepts and difficult masks | Needs prompts and extra rules | Labeling tool or fallback |
+| Depth Anything V2 | Fast relative depth | Not metric depth | Fog and distance signal |
+| Weather classifier | Current weather and unusual inputs | Does not localize | Production confidence check |
 
-SegFormer is preferred for runtime because its one-pass semantic map maps directly into the weather ontology. SAM 3 helps with missing concepts and difficult boundaries, but requires prompts, rules for missing or overlapping masks, and separate confidence calibration, so it remains a supporting model.
-
-In production, segmentation and depth would run in parallel as TensorRT FP16/INT8 engines, and decompositions would be cached by content hash. Small devices use B0 at lower resolution and get more conservative masks. These deployment optimizations are targets; release latency and peak VRAM must be measured on the L4 rather than inferred from model cards.
+On an L4, segmentation and depth can run in parallel. A production build would use FP16/INT8 TensorRT engines and cache the result. Small devices would use SegFormer-B0 at lower resolution and more conservative masks. Latency and memory still need end-to-end measurement.
 
 ## Data strategy
 
-1. License adverse-weather and driving datasets plus consented outdoor photos, covering a good mix of regions, scene types, cameras, day/night, and weather.
-2. Hand-label 2,000–5,000 diverse frames; have the hardest 15% labeled twice.
-3. Pseudo-label a larger pool with an ensemble (panoptic segmentation, depth, OCR); drop images where the models disagree.
-4. Collect webcam and burst photos of the same scene in different weather. After exposure correction, their differences show which regions weather actually changes.
-5. Render synthetic fog/rain/snow with exact masks, but keep at least half of every batch real so the model doesn't learn synthetic texture quirks.
-6. Feed failures back in: cases the gates rejected, cases the model was unsure about, and whatever is underrepresented. Never let the same scene appear in both train and test.
+1. Start with licensed weather datasets and consented outdoor photos. Cover different regions, cameras, times of day, and weather.
+2. Hand-label 2,000–5,000 varied frames. Label difficult examples twice, then pseudo-label a larger pool with stronger models.
+3. Add same-place photos taken in different weather. They show what weather changes in the real world.
+4. Add synthetic rain, fog, and snow for exact masks, but keep at least half of each batch grounded in real photos.
+5. Feed rejected and low-confidence cases back into training. Split by location so the same scene never appears in training and evaluation.
 
 ## Failure modes and handling
 
 | Failure | Detection | Handling |
 | --- | --- | --- |
-| White building merges with overcast sky | Boundary disagreement; top-connectivity; depth discontinuity | Refine with panoptic fallback; erode edit mask; review if large |
-| Reflections/puddles confused with sky | Semantic class and vertical position conflict | Keep as surface response, never sky |
-| Fog hides distant objects | Low contrast; uncertain depth | Lower edit strength and preserve edges; allow lighting change but no geometry change |
-| Snow on thin branches or signs | High edge/OCR overlap | Guard text and branch topology; feather accumulation behind guard |
-| Occluded people/vehicles | Instance confidence or truncated boundary | Expand hard guard and reject identity-sensitive failures |
-| Indoor/window scene | Scene classifier and sky not top-connected | Segment panes separately or reject unsupported input |
-| Night, infrared, extreme HDR | Unusual-input and quality checks | Route to a specialist model; do not silently apply daytime priors |
-| Multiple weather attributes entangled | Classifier disagreement and low target margin | Represent weather as a vector; edit one controlled target while preserving time-of-day |
+| White building mistaken for sky | Boundary and depth disagree | Shrink the mask or use a stronger segmenter |
+| Reflection mistaken for sky | Class conflicts with image position | Treat it as a surface, never sky |
+| Fog hides a distant object | Low contrast and uncertain depth | Reduce edit strength; preserve its edges |
+| Snow covers a sign or branch | Snow overlaps text or thin edges | Protect the shape and place snow behind it |
+| Person or vehicle is partly hidden | Low-confidence object boundary | Expand the guard or reject the edit |
+| Indoor view through a window | Sky is not connected to the top | Handle the window separately or reject |
+| Night, infrared, or extreme HDR | Input-quality check flags a shift | Route to a specialist model |
+| Weather and time of day are mixed | Weather classifiers disagree | Change one weather target; preserve time of day |
 
 ## Privacy and retention
 
-EXIF/GPS is stripped at ingress, and everything runs locally with no third-party APIs. Raw images and latents are stored encrypted and deleted when the job expires. Masks, embeddings, depth, and OCR boxes can still reveal silhouettes and identifiers, so they get the same access policy as the raw image. They are not anonymous. Logs contain model versions, metrics, and salted job IDs, nothing else. Face/plate embeddings only exist while the preservation check runs.
+EXIF and GPS are removed at entry, and inference stays local. Raw photos and temporary latents are encrypted and deleted when the job expires. Masks, depth maps, OCR boxes, and embeddings may still reveal people or places, so they follow the same access rules as the source. Logs keep only model versions, metrics, and salted job IDs.
